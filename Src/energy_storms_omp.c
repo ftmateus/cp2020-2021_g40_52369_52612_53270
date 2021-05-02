@@ -18,7 +18,7 @@
 #include<stdlib.h>
 #include<math.h>
 #include<sys/time.h>
-#include<omp-tools.h>
+#include<omp.h>
 
 /* Function to get wall time */
 double cp_Wtime(){
@@ -27,6 +27,7 @@ double cp_Wtime(){
     return tv.tv_sec + 1.0e-6 * tv.tv_usec;
 }
 
+typedef float energy_t;
 
 #define THRESHOLD    0.001f
 
@@ -38,7 +39,7 @@ typedef struct {
 
 /* THIS FUNCTION CAN BE MODIFIED */
 /* Function to update a single position of the layer */
-void update( float *layer, int layer_size, int k, int pos, float energy ) {
+void update( energy_t *layer, int layer_size, int k, int pos, energy_t energy ) {
     /* 1. Compute the absolute value of the distance between the
         impact position and the k-th position of the layer */
     int distance = pos - k;
@@ -53,7 +54,7 @@ void update( float *layer, int layer_size, int k, int pos, float energy ) {
     float atenuacion = sqrtf( (float)distance );
 
     /* 4. Compute attenuated energy */
-    float energy_k = energy / layer_size / atenuacion;
+    energy_t energy_k = energy / layer_size / atenuacion;
 
     /* 5. Do not add if its absolute value is lower than the threshold */
     if ( energy_k >= THRESHOLD / layer_size || energy_k <= -THRESHOLD / layer_size )
@@ -63,7 +64,7 @@ void update( float *layer, int layer_size, int k, int pos, float energy ) {
 
 /* ANCILLARY FUNCTIONS: These are not called from the code section which is measured, leave untouched */
 /* DEBUG function: Prints the layer status */
-void debug_print(int layer_size, float *layer, int *positions, float *maximum, int num_storms ) {
+void debug_print(int layer_size, energy_t *layer, int *positions, energy_t *maximum, int num_storms ) {
     int i,k;
     /* Only print for array size up to 35 (change it for bigger sizes if needed) */
     if ( layer_size <= 35 ) {
@@ -154,7 +155,7 @@ int main(int argc, char *argv[]) {
         storms[i-2] = read_storm_file( argv[i] );
 
     /* 1.3. Intialize maximum levels to zero */
-    float maximum[ num_storms ];
+    energy_t maximum[ num_storms ];
     int positions[ num_storms ];
     for (i=0; i<num_storms; i++) {
         maximum[i] = 0.0f;
@@ -167,8 +168,8 @@ int main(int argc, char *argv[]) {
     /* START: Do NOT optimize/parallelize the code of the main program above this point */
 
     /* 3. Allocate memory for the layer and initialize to zero */
-    float *layer = (float *)malloc( sizeof(float) * layer_size );
-    float *layer_copy = (float *)malloc( sizeof(float) * layer_size );
+    energy_t *layer         = (energy_t *)malloc( sizeof(energy_t) * layer_size );
+    energy_t *layer_copy    = (energy_t *)malloc( sizeof(energy_t) * layer_size );
     if ( layer == NULL || layer_copy == NULL ) {
         fprintf(stderr,"Error: Allocating the layer memory\n");
         exit( EXIT_FAILURE );
@@ -183,7 +184,7 @@ int main(int argc, char *argv[]) {
         /* For each particle */
         for( j=0; j<storms[i].size; j++ ) {
             /* Get impact energy (expressed in thousandths) */
-            float energy = (float)storms[i].posval[j*2+1] * 1000;
+            energy_t energy = (energy_t) storms[i].posval[j*2+1] * 1000;
             /* Get impact position */
             int position = storms[i].posval[j*2];
 
