@@ -16,9 +16,27 @@
  */
 #include<stdio.h>
 #include<stdlib.h>
+#include <unistd.h>
 #include<math.h>
 #include<sys/time.h>
 #include<omp.h>
+
+#define DEFAULT_COLOR   "\033[0m"
+#define RED             "\033[0;31m"
+#define GREEN           "\033[0;32m"
+#define YELLOW          "\033[0;33m"
+#define BLUE            "\033[0;34m"
+#define PURPLE          "\033[0;35m"
+#define CYAN            "\033[0;36m"
+#define WHITE           "\033[0;37m"
+
+#define printfColor(color, format, ...) \
+    {\
+        if(isatty(fileno(stdout))) \
+            printf(color format DEFAULT_COLOR, ##__VA_ARGS__); \
+        else \
+            printf(format, ##__VA_ARGS__);\
+    }
 
 /* Function to get wall time */
 double cp_Wtime(){
@@ -61,17 +79,20 @@ void update( energy_t *layer, int layer_size, int k, int pos, energy_t energy ) 
         layer[k] = layer[k] + energy_k;
 }
 
-
 /* ANCILLARY FUNCTIONS: These are not called from the code section which is measured, leave untouched */
 /* DEBUG function: Prints the layer status */
 void debug_print(int layer_size, energy_t *layer, int *positions, energy_t *maximum, int num_storms ) {
     int i,k;
+
+    //https://www.lix.polytechnique.fr/~liberti/public/computing/prog/c/C/FUNCTIONS/format.html
+    int k_justify = (int) log10(layer_size) + 1;
+
     /* Only print for array size up to 35 (change it for bigger sizes if needed) */
     if ( layer_size <= 35 ) {
         /* Traverse layer */
         for( k=0; k<layer_size; k++ ) {
             /* Print the energy value of the current cell */
-            printf("%10.4f |", layer[k] );
+            printf("%0*d | %10.4f |", k_justify, k + 1, layer[k] );
 
             /* Compute the number of characters. 
                This number is normalized, the maximum level is depicted with 60 characters */
@@ -82,7 +103,7 @@ void debug_print(int layer_size, energy_t *layer, int *positions, energy_t *maxi
 
             /* If the cell is a local maximum print a special trailing character */
             if ( k>0 && k<layer_size-1 && layer[k] > layer[k-1] && layer[k] > layer[k+1] )
-                printf("x");
+                printfColor(RED, "x")
             else
                 printf("o");
 
