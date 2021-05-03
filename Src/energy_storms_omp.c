@@ -38,6 +38,12 @@
             printf(format, ##__VA_ARGS__);\
     }
 
+void setColor(char *color)
+{
+    if(isatty(fileno(stdout)))
+        printf("%s", color);
+}
+
 /* Function to get wall time */
 double cp_Wtime(){
     struct timeval tv;
@@ -81,7 +87,7 @@ void update( energy_t *layer, int layer_size, int k, int pos, energy_t energy ) 
 
 /* ANCILLARY FUNCTIONS: These are not called from the code section which is measured, leave untouched */
 /* DEBUG function: Prints the layer status */
-void debug_print(int layer_size, energy_t *layer, int *positions, energy_t *maximum, int num_storms ) {
+void debug_print(int layer_size, energy_t *layer, int *positions, energy_t *maximum, int num_storms , Storm *storms) {
     int i,k;
 
     //https://www.lix.polytechnique.fr/~liberti/public/computing/prog/c/C/FUNCTIONS/format.html
@@ -92,13 +98,31 @@ void debug_print(int layer_size, energy_t *layer, int *positions, energy_t *maxi
         /* Traverse layer */
         for( k=0; k<layer_size; k++ ) {
             /* Print the energy value of the current cell */
-            printf("%0*d | %10.4f |", k_justify, k + 1, layer[k] );
+            printf("%0*d | ", k_justify, k + 1);
+            //TODO number particles
+            // {
+            //     int particles_hit = 0;
+            //     for(int j=0; i< num_storms; j++)
+            //     {
+            //         particles_hit += storms[j].posval[2*k]; 
+            //     } 
+            //     if(particles_hit > 0)
+            //     {
+            //         printfColor(RED, "%d |", particles_hit)
+            //     }
+            //     else
+            //     {
+            //         printf("%d |", particles_hit);
+            //     }
+            // }
+            printf("%10.4f |", layer[k] );
 
             /* Compute the number of characters. 
                This number is normalized, the maximum level is depicted with 60 characters */
             int ticks = (int)( 60 * layer[k] / maximum[num_storms-1] );
 
             /* Print all characters except the last one */
+            setColor(PURPLE);
             for (i=0; i<ticks-1; i++ ) printf("o");
 
             /* If the cell is a local maximum print a special trailing character */
@@ -107,9 +131,11 @@ void debug_print(int layer_size, energy_t *layer, int *positions, energy_t *maxi
             else
                 printf("o");
 
+            setColor(DEFAULT_COLOR);
+
             /* If the cell is the maximum of any storm, print the storm mark */
             for (i=0; i<num_storms; i++) 
-                if ( positions[i] == k ) printf(" M%d", i );
+                if ( positions[i] == k ) printfColor(GREEN, " M%d", i );
 
             /* Line feed */
             printf("\n");
@@ -245,7 +271,7 @@ int main(int argc, char *argv[]) {
 
     /* 6. DEBUG: Plot the result (only for layers up to 35 points) */
     #ifdef DEBUG
-    debug_print( layer_size, layer, positions, maximum, num_storms );
+    debug_print( layer_size, layer, positions, maximum, num_storms, storms);
     #endif
 
     /* 7. Results output, used by the Tablon online judge software */
