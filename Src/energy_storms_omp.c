@@ -98,7 +98,7 @@ void debug_print(int layer_size, energy_t *layer, int *positions, energy_t *maxi
         /* Traverse layer */
         for( k=0; k<layer_size; k++ ) {
             /* Print the energy value of the current cell */
-            printf("%0*d | ", k_justify, k + 1);
+            printf("%0*d | ", k_justify, k);
             //TODO number particles
             // {
             //     int particles_hit = 0;
@@ -277,11 +277,12 @@ int main(int argc, char *argv[]) {
     /* 7. Results output, used by the Tablon online judge software */
     printf("\n");
     /* 7.1. Total computation time */
-    printf("Time: %lf\n", ttotal );
+    printfColor(BLUE, "Time: ")
+    printf("%lf\n", ttotal );
     /* 7.2. Print the maximum levels */
-    printf("Result:");
+    printfColor(BLUE, "Results:\n")
     for (i=0; i<num_storms; i++)
-        printf(" %d %f", positions[i], maximum[i] );
+        printf("%d %f\n", positions[i], maximum[i] );
     printf("\n");
 
     /* 8. Free resources */    
