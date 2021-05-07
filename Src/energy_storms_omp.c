@@ -223,25 +223,17 @@ int main(int argc, char *argv[]) {
     }
     double initial = cp_Wtime();
 
-    #pragma omp paralell num_threads(4)
+    #pragma omp parallel for
+    for(int kk = 0; kk<layer_size; kk++ ) 
     {
-        int kk;
-        #pragma omp for
-        for(kk = 0; kk<layer_size; kk++ ) 
-        {
-            if(kk == 0) printf("%d\n",omp_get_num_threads());
-            layer[k] = 0.0f;
-            layer_copy[k] = 0.0f;
-        }
+        layer[kk] = 0.0f;
+        layer_copy[kk] = 0.0f;
     }
+    
     double final = cp_Wtime();
 
     double result = final - initial;
 
-    printf("%f\n\n", result);
-
-    exit(0);
-    
     /* 4. Storms simulation */
     for( i=0; i<num_storms; i++) {
 
