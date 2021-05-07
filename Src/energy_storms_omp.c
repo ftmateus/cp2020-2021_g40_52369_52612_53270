@@ -221,14 +221,33 @@ int main(int argc, char *argv[]) {
         fprintf(stderr,"Error: Allocating the layer memory\n");
         exit( EXIT_FAILURE );
     }
-    for( k=0; k<layer_size; k++ ) layer[k] = 0.0f;
-    for( k=0; k<layer_size; k++ ) layer_copy[k] = 0.0f;
+    double initial = cp_Wtime();
+
+    #pragma omp paralell num_threads(4)
+    {
+        int kk;
+        #pragma omp for
+        for(kk = 0; kk<layer_size; kk++ ) 
+        {
+            if(kk == 0) printf("%d\n",omp_get_num_threads());
+            layer[k] = 0.0f;
+            layer_copy[k] = 0.0f;
+        }
+    }
+    double final = cp_Wtime();
+
+    double result = final - initial;
+
+    printf("%f\n\n", result);
+
+    exit(0);
     
     /* 4. Storms simulation */
     for( i=0; i<num_storms; i++) {
 
         /* 4.1. Add impacts energies to layer cells */
         /* For each particle */
+        
         for( j=0; j<storms[i].size; j++ ) {
             /* Get impact energy (expressed in thousandths) */
             energy_t energy = (energy_t) storms[i].posval[j*2+1] * 1000;
@@ -244,11 +263,13 @@ int main(int argc, char *argv[]) {
 
         /* 4.2. Energy relaxation between storms */
         /* 4.2.1. Copy values to the ancillary array */
+        #pragma paralell for
         for( k=0; k<layer_size; k++ ) 
             layer_copy[k] = layer[k];
 
         /* 4.2.2. Update layer using the ancillary values.
                   Skip updating the first and last positions */
+        #pragma paralell for
         for( k=1; k<layer_size-1; k++ )
             layer[k] = ( layer_copy[k-1] + layer_copy[k] + layer_copy[k+1] ) / 3;
 
