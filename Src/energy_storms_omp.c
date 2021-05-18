@@ -20,6 +20,7 @@
 #include<math.h>
 #include<sys/time.h>
 #include<omp.h>
+#include<omp.h>
 
 #define DEFAULT_COLOR   "\033[0m"
 #define RED             "\033[0;31m"
@@ -29,6 +30,8 @@
 #define PURPLE          "\033[0;35m"
 #define CYAN            "\033[0;36m"
 #define WHITE           "\033[0;37m"
+
+typedef enum { FALSE, TRUE } boolean;
 
 #define printfColor(color, format, ...) \
     {\
@@ -181,25 +184,68 @@ Storm read_storm_file( char *fname ) {
     return storm;
 }
 
+boolean csv = FALSE;
+
+short processOptions(int argc, char *argv[])
+{
+	short optargc = 0;
+    char c;
+    while((c = getopt(argc, argv, "c:t:")) != -1)
+    {
+        switch(c)
+        {
+            case 'c': case 'C': 
+				csv = TRUE; 
+				if(optarg != NULL)
+				{
+					freopen(optarg, "w", stdout);
+					optargc++;
+				}
+				break;
+			case 't': case 'T': 
+			{
+				int n_threads = atoi(optarg);
+
+				if (n_threads <= 0)
+				{
+					fprintf(stderr, "Invalid number of threads! %d\n", n_threads);
+					exit(1);
+				}
+
+				omp_set_num_threads(n_threads);
+				optargc++;
+				break;
+			}
+        }
+		optargc++;
+    }
+	return optargc;
+}
+
 /*
  * MAIN PROGRAM
  */
 int main(int argc, char *argv[]) {
     int i,j,k;
 
-    /* 1.1. Read arguments */
-    if (argc<3) {
-        fprintf(stderr,"Usage: %s <size> <storm_1_file> [ <storm_i_file> ] ... \n", argv[0] );
-        exit( EXIT_FAILURE );
-    }
+	short optargc = processOptions(argc, argv);
 
-    int layer_size = atoi( argv[1] );
-    int num_storms = argc-2;
-    Storm storms[ num_storms ];
+   /* 1.1. Read arguments */
+	if (argc - optargc < 3)
+	{
+		fprintf(stderr,
+				"Usage: %s <options> <size> <storm_1_file> [ <storm_i_file> ] ... \n",
+				argv[0]);
+		exit(EXIT_FAILURE);
+	}
 
-    /* 1.2. Read storms information */
-    for( i=2; i<argc; i++ ) 
-        storms[i-2] = read_storm_file( argv[i] );
+	int layer_size = atoi(argv[optargc + 1]);
+	int num_storms = argc - optargc - 2;
+	Storm storms[num_storms];
+
+	/* 1.2. Read storms information */
+	for (i = 2 + optargc; i < argc; i++)
+		storms[i - (2 + optargc)] = read_storm_file(argv[i]);
 
     /* 1.3. Intialize maximum levels to zero */
     energy_t maximum[ num_storms ];
@@ -284,19 +330,23 @@ int main(int argc, char *argv[]) {
 
     /* 6. DEBUG: Plot the result (only for layers up to 35 points) */
     #ifdef DEBUG
-    debug_print( layer_size, layer, positions, maximum, num_storms, storms);
+	if(!csv)
+    	debug_print( layer_size, layer, positions, maximum, num_storms, storms);
     #endif
 
     /* 7. Results output, used by the Tablon online judge software */
     printf("\n");
-    /* 7.1. Total computation time */
-    printfColor(BLUE, "Time: ")
-    printf("%lf\n", ttotal );
-    /* 7.2. Print the maximum levels */
-    printfColor(BLUE, "Results:\n")
-    for (i=0; i<num_storms; i++)
-        printf("%d %f\n", positions[i], maximum[i] );
-    printf("\n");
+
+    char *separator = csv ? "," : " ";
+	/* 7.1. Total computation time */
+	printfColor(BLUE, "Time:%s", separator)
+	printf("%lf\n", ttotal);
+	/* 7.2. Print the maximum levels */
+	printfColor(BLUE, "Results:\n")
+
+	for (i = 0; i < num_storms; i++)
+		printf("%d%s%f\n", positions[i], separator,  maximum[i]);
+	printf("\n");
 
     /* 8. Free resources */    
     for( i=0; i<argc-2; i++ )
