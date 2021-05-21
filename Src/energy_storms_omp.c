@@ -14,13 +14,13 @@
  * This work is licensed under a Creative Commons Attribution-ShareAlike 4.0 International License.
  * https://creativecommons.org/licenses/by-sa/4.0/
  */
-#include<stdio.h>
-#include<stdlib.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
-#include<math.h>
-#include<sys/time.h>
-#include<omp.h>
-#include<omp.h>
+#include <math.h>
+#include <sys/time.h>
+#include <omp.h>
+#include <assert.h>
 
 #define DEFAULT_COLOR   "\033[0m"
 #define RED             "\033[0;31m"
@@ -61,7 +61,7 @@ double cp_Wtime()
 typedef float energy_t;
 
 //#define THRESHOLD    0.001f
-#define THRESHOLD    50.0f
+#define THRESHOLD     0.001f
 
 /* Structure used to store data for one storm of particles */
 typedef struct
@@ -93,9 +93,12 @@ void update(energy_t *layer, int layer_size, int k, int pos, energy_t energy)
 	//printf("energy : %f\n", energy);
 	//printf("energy received: %f\n", energy_k);
 	/* 5. Do not add if its absolute value is lower than the threshold */
-	if (energy_k >= THRESHOLD / layer_size
-			|| energy_k <= -THRESHOLD / layer_size)
-		layer[k] = layer[k] + energy_k;
+	// if (energy_k >= THRESHOLD / layer_size
+	// 		|| energy_k <= -THRESHOLD / layer_size)
+
+	assert(energy_k >= THRESHOLD / layer_size || energy_k <= -THRESHOLD / layer_size);
+	
+	layer[k] = layer[k] + energy_k;
 
 }
 
@@ -104,7 +107,7 @@ void update(energy_t *layer, int layer_size, int k, int pos, energy_t energy)
 void debug_print(int layer_size, energy_t *layer, int *positions,
 		energy_t *maximum, int num_storms, Storm *storms)
 {
-	int i, k;
+	unsigned int i, k;
 
 	//https://www.lix.polytechnique.fr/~liberti/public/computing/prog/c/C/FUNCTIONS/format.html
 	int k_justify = (int) log10(layer_size) + 1;
@@ -117,22 +120,7 @@ void debug_print(int layer_size, energy_t *layer, int *positions,
 		{
 			/* Print the energy value of the current cell */
 			printf("%0*d | ", k_justify, k);
-			//TODO number particles
-			// {
-			//     int particles_hit = 0;
-			//     for(int j=0; i< num_storms; j++)
-			//     {
-			//         particles_hit += storms[j].posval[2*k];
-			//     }
-			//     if(particles_hit > 0)
-			//     {
-			//         printfColor(RED, "%d |", particles_hit)
-			//     }
-			//     else
-			//     {
-			//         printf("%d |", particles_hit);
-			//     }
-			// }
+
 			printf("%10.4f |", layer[k]);
 
 			/* Compute the number of characters.
@@ -212,6 +200,8 @@ Storm read_storm_file(char *fname)
 
 boolean csv = FALSE;
 
+short n_threads = 1;
+
 short processOptions(int argc, char *argv[])
 {
 	short optargc = 0;
@@ -232,7 +222,7 @@ short processOptions(int argc, char *argv[])
 		case 't':
 		case 'T':
 		{
-			int n_threads = atoi(optarg);
+			n_threads = atoi(optarg);
 
 			if (n_threads <= 0)
 			{
@@ -240,7 +230,7 @@ short processOptions(int argc, char *argv[])
 				exit(1);
 			}
 
-			omp_set_num_threads(n_threads);
+			//omp_set_num_threads(n_threads);
 			optargc++;
 			break;
 		}
@@ -292,6 +282,7 @@ int main(int argc, char *argv[])
 
 	/* 3. Allocate memory for the layer and initialize to zero */
 	energy_t *layer = (energy_t *) malloc(sizeof(energy_t) * layer_size);
+	energy_t *layer_copy = (energy_t *) malloc(sizeof(energy_t) * layer_size);
 
 	if (layer == NULL)
 	{
@@ -300,7 +291,7 @@ int main(int argc, char *argv[])
 	}
 	double initial = cp_Wtime();
 
-#pragma omp parallel for
+	#pragma omp parallel for
 	for (int kk = 0; kk < layer_size; kk++)
 	{
 		layer[kk] = 0.0f;
@@ -311,54 +302,66 @@ int main(int argc, char *argv[])
 	/* 4. Storms simulation */
 	for (i = 0; i < num_storms; i++)
 	{
-
 		/* 4.1. Add impacts energies to layer cells */
 		/* For each particle */
 		//O(p)
-		for (j = 0; j < storms[i].size; j++)
-		{
-			/* Get impact energy (expressed in thousandths) */
-			energy_t energy = (energy_t) storms[i].posval[j * 2 + 1] * 1000;
-			/* Get impact position */
-			int position = storms[i].posval[j * 2];
-
-			/* For each cell in the layer */
-			//atenuation = energy/layer_size/THRESHOLD
-			//atenuation*atenuation = distanceMax
-			//if(pos+distanceMax>layer_size) max = layer_size-1 else max = pos+distanceMax
-			//if(pos-distanceMax<0) min = 0 else min = pos-distanceMax
-			float atenuation = energy / THRESHOLD;
-			int distanceMax = (int) atenuation * atenuation;
-
-			if (distanceMax < 0)
-				distanceMax = -distanceMax;
-
-			distanceMax--;
-			int max = position + distanceMax, min = position - distanceMax;
-			if (max > layer_size || max < 0)
-				max = layer_size;
-			if (min > layer_size || min < 0)
-				min = 0;
-
-#pragma omp paralell for
-			for (k = min; k < max; k++)
+		
+			for (j = 0; j < storms[i].size; j++)
 			{
+				/* Get impact energy (expressed in thousandths) */
+				energy_t energy = (energy_t) storms[i].posval[j * 2 + 1] * 1000;
+				/* Get impact position */
+				int position = storms[i].posval[j * 2];
 
-				/* Update the energy value for the cell */
-				update(layer, layer_size, k, position, energy);
+				/* For each cell in the layer */
+				//atenuation = energy/layer_size/THRESHOLD
+				//atenuation*atenuation = distanceMax
+				//if(pos+distanceMax>layer_size) max = layer_size-1 else max = pos+distanceMax
+				//if(pos-distanceMax<0) min = 0 else min = pos-distanceMax
+				float atenuation = energy / THRESHOLD;
+				long distanceMax = (long) atenuation * atenuation;
+
+				assert(distanceMax >= 0);
+				// if (distanceMax < 0)
+				// 	distanceMax = -distanceMax;
+
+				distanceMax--;
+				long max = position + distanceMax, 
+				min = position - distanceMax;
+
+				assert(min <= layer_size);
+				assert(max >= 0);
+
+				if (max > layer_size)
+					max = layer_size;
+				if (min < 0)
+					min = 0;
+
+				#pragma omp parallel num_threads(n_threads)
+				{
+					//fprintf(stderr, "%d\n", omp_get_num_threads());
+					//fprintf(stderr, "%d\n", omp_get_num_teams());
+
+					#pragma omp for
+					for (k = min; k < max; k++)
+					{
+						/* Update the energy value for the cell */
+						update(layer, layer_size, k, position, energy);
+					}
+				}
 			}
-		}
-
 		//total = O(p*(l/t))
 		/* 4.2. Energy relaxation between storms */
 		/* 4.2.1. Copy values to the ancillary array */
 //make a lock to get all the ancillary cells of each thread
+
+		#ifdef NOOOO
 		int previousNeighbor = 0;
 		int LastNeighbor = 100;
 		/* 4.2.2. Update layer using the ancillary values.
 		 Skip updating the first and last positions */
 
-#pragma omp paralell for private(previousNeighbor)
+		#pragma omp paralell for private(previousNeighbor)
 		for (k = 1; k < layer_size - 1; k++)//TODO k not =1, depending on thread
 		//TODO nextPreviousNeighbor = layer[k-1] wouldn't work, because a thread might end before another starts
 		{
@@ -374,39 +377,39 @@ int main(int argc, char *argv[])
 				positions[i] = k;
 			}
 		}
+		#endif
 		//layer[k] = (previousNeighbor + layer[k] + layer[last) / 3;
 		/* 4.3. Locate the maximum value in the layer, and its position
 		 /*
 		 float *layer_copy = (float *) malloc(sizeof(float) * layer_size);
 		 for (k = 0; k < layer_size; k++)
 		 layer_copy[k] = 0.0f;
-//
-//		 /* 4.2. Energy relaxation between storms */
-//		/* 4.2.1. Copy values to the ancillary array */
-//		for (k = 0; k < layer_size; k++)
-//			layer_copy[k] = layer[k];
-//
-//		/* 4.2.2. Update layer using the ancillary values.
-//		 Skip updating the first and last positions */
-//		for (k = 1; k < layer_size - 1; k++)
-//			layer[k] = (layer_copy[k - 1] + layer_copy[k] + layer_copy[k + 1])
-//					/ 3;
-//
-//		/* 4.3. Locate the maximum value in the layer, and its position */
-//		for (k = 1; k < layer_size - 1; k++)
-//		{
-//			/* Check it only if it is a local maximum */
-//			if (layer[k] > layer[k - 1] && layer[k] > layer[k + 1])
-//			{
-//				if (layer[k] > maximum[i])
-//				{
-//					maximum[i] = layer[k];
-//					positions[i] = k;
-//				}
-//			}
-//		}
-//	}
-//	*/
+
+		 /* 4.2. Energy relaxation between storms */
+		/* 4.2.1. Copy values to the ancillary array */
+		for (k = 0; k < layer_size; k++)
+			layer_copy[k] = layer[k];
+
+		/* 4.2.2. Update layer using the ancillary values.
+		 Skip updating the first and last positions */
+		for (k = 1; k < layer_size - 1; k++)
+			layer[k] = (layer_copy[k - 1] + layer_copy[k] + layer_copy[k + 1])
+					/ 3;
+
+		/* 4.3. Locate the maximum value in the layer, and its position */
+		for (k = 1; k < layer_size - 1; k++)
+		{
+			/* Check it only if it is a local maximum */
+			if (layer[k] > layer[k - 1] && layer[k] > layer[k + 1])
+			{
+				if (layer[k] > maximum[i])
+				{
+					maximum[i] = layer[k];
+					positions[i] = k;
+				}
+			}
+		}
+	}
 	/* END: Do NOT optimize/parallelize the code below this point */
 
 	/* 5. End time measurement */
@@ -438,5 +441,4 @@ int main(int argc, char *argv[])
 
 	/* 9. Program ended successfully */
 	return 0;
-}
 }

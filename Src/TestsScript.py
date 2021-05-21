@@ -105,7 +105,7 @@ def get_test_files(regex_expr = "test_*"):
 
     return test_files
 
-def start_energy_storms_program(layer_size, test_files, n_threads = 1):
+def start_energy_storms_program(layer_size, test_files, n_threads = 1, program = "default"):
     def parse_results():
         output_arr = []
         with open(CSV_FILENAME, "r") as csv_file:
@@ -127,12 +127,16 @@ def start_energy_storms_program(layer_size, test_files, n_threads = 1):
 
     proc = None
 
-    if(n_threads == 1):
-        proc = subprocess.run([ENERGY_STORMS_SEQ_EXEC, "-c", CSV_FILENAME, 
-                        str(layer_size)] + test_files)
+    if(program == "default"):
+        if(n_threads == 1):
+            proc = subprocess.run([ENERGY_STORMS_SEQ_EXEC, "-c", CSV_FILENAME, 
+                            str(layer_size)] + test_files)
+        else:
+            proc = subprocess.run([ENERGY_STORMS_OMP_EXEC, "-c", CSV_FILENAME, 
+                            "-t", str(n_threads), str(layer_size)] + test_files)
     else:
-        proc = subprocess.run([ENERGY_STORMS_OMP_EXEC, "-c", CSV_FILENAME, 
-                        "-t", str(n_threads), str(layer_size)] + test_files)
+        proc = subprocess.run([program, "-c", CSV_FILENAME, 
+                            "-t", str(n_threads), str(layer_size)] + test_files)
 
     if proc.returncode != 0:
         print("\033[0;31mError while executing program! Aborting script...")
@@ -179,7 +183,7 @@ def plot_results_nthreads_time(plot_name, samples, layer_size):
     plt.savefig(PLOTS_FOLDER + plot_name)
     plt.close()
 
-def run_tests(layer_size, test_files, n_runs = 2):
+def run_tests(layer_size, test_files, n_runs = 2, program="default"):
 
     samples = []
 
@@ -203,9 +207,14 @@ def run_tests(layer_size, test_files, n_runs = 2):
 
 all_test_files = get_test_files()
 
-layer_size = 1000
+layer_size = 10000000
 
-samples = run_tests(layer_size, all_test_files, n_runs = 5)
+# samples = run_tests(layer_size, all_test_files, n_runs = 5)
+
+samples = run_tests(layer_size, 
+["test_files/test_01_a35_p7_w2",
+"test_files/test_01_a35_p5_w3",
+"test_files/test_01_a35_p8_w1"], n_runs = 5)
 
 plot_results_nthreads_time("plot_init_arrays_speedup", samples, layer_size)
 
