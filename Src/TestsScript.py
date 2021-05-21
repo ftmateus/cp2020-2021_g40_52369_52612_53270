@@ -1,6 +1,7 @@
 import subprocess
 import os
 import re
+import sys
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,7 +16,7 @@ PLOTS_FOLDER = "plots/"
 ENERGY_STORMS_OMP_EXEC = "./energy_storms_omp"
 ENERGY_STORMS_SEQ_EXEC = "./energy_storms_seq"
 
-MAX_THREADS = 8
+MAX_THREADS = os.cpu_count() + 2
 
 class ProgramResultsSample:
     def __init__(self, layer_size, n_threads, test_files, time, results):
@@ -25,14 +26,28 @@ class ProgramResultsSample:
         self.n_threads  = n_threads
         self.test_files = test_files
 
-    def printAll(self):
+    def printAll(self, towrite=sys.stdout):
+        oldstdout = sys.stdout
+        if(towrite != sys.stdout):
+            sys.stdout = open(towrite, 'w')
+
         print("Time: ",         self.time)
         print("Layer size: ",   self.layer_size)
         print("Threads: ",      self.n_threads)
-        print("Test files:\n",  self.test_files)
-        print("Results:\n",     self.results)
+        print("Test files:\n")
+        for t in self.test_files:
+            print(t)
+        print("Results:\n")
+        for r in self.results:
+            print(r[0], r[1])
+
+        if(sys.stdout != oldstdout):
+            sys.stdout.close()
+            sys.stdout = oldstdout
 
     def compareResults(self, other):
+        if self.layer_size != other.layer_size:
+            return False
         for i, r in enumerate(self.results):
             if r[1] != other.results[i][1]:
                 return False
@@ -110,11 +125,18 @@ def start_energy_storms_program(layer_size, test_files, n_threads = 1):
 
     #FUNCTION START
 
-    proc = subprocess.run([ENERGY_STORMS_OMP_EXEC, "-c", CSV_FILENAME, 
-                    "-t", str(n_threads), str(layer_size)] + test_files)
+    proc = None
+
+    if(n_threads == 1):
+        proc = subprocess.run([ENERGY_STORMS_SEQ_EXEC, "-c", CSV_FILENAME, 
+                        str(layer_size)] + test_files)
+    else:
+        proc = subprocess.run([ENERGY_STORMS_OMP_EXEC, "-c", CSV_FILENAME, 
+                        "-t", str(n_threads), str(layer_size)] + test_files)
 
     if proc.returncode != 0:
-        print("Error while executing program! Aborting script...")
+        print("\033[0;31mError while executing program! Aborting script...")
+        os.remove(CSV_FILENAME)
         exit(1)
 
 
@@ -129,11 +151,9 @@ def plot_results_nthreads_time(plot_name, samples, layer_size):
 
     figure, (timesPlt, otherstatsPlt) = plt.subplots(2)
 
-    # ax = times.figure().gca()
-    # ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    timesPlt.xaxis.set_major_locator(MaxNLocator(integer=True))
 
-    # ax = otherstats.figure().gca()
-    # ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    otherstatsPlt.xaxis.set_major_locator(MaxNLocator(integer=True))
 
     stats = SamplesStats(samples)
 
@@ -160,27 +180,35 @@ def plot_results_nthreads_time(plot_name, samples, layer_size):
     plt.close()
 
 def run_tests(layer_size, test_files, n_runs = 2):
+
     samples = []
 
     for t in range (1, MAX_THREADS + 1):
-        for _ in range(n_runs):
-            samples.append(start_energy_storms_program(layer_size, test_files, n_threads=t))
-
+        print(t, "thread(s)")
+        for r in range(n_runs):
+            print( r + 1, "\r", end = '')
+            s = start_energy_storms_program(layer_size, test_files, n_threads=t)
+            if(samples != [] and not s.compareResults(samples[len(samples) - 1])):
+                print("\033[0;31mOutput mismatch! Differences:\033[0m")
+                samples[len(samples) - 1].printAll("Sample1_out.txt")
+                s.printAll("Sample2_out.txt")
+                subprocess.run(["diff", "Sample1_out.txt", "Sample2_out.txt"])
+                os.remove(CSV_FILENAME)
+                print("\033[0;31mAborting script...")
+                exit(1)
+            samples.append(s)
     return samples
 
 #################MAIN##################
 
 all_test_files = get_test_files()
 
-layer_size = 100
+layer_size = 1000
 
-samples = run_tests(layer_size, all_test_files, n_runs = 10)
+samples = run_tests(layer_size, all_test_files, n_runs = 5)
 
 plot_results_nthreads_time("plot_init_arrays_speedup", samples, layer_size)
 
+print("\033[0;32mTest complete!")
+
 os.remove(CSV_FILENAME)
-
-
-
-
-

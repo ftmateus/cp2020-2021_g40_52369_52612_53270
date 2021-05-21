@@ -18,6 +18,9 @@
 #include<stdlib.h>
 #include<math.h>
 #include<sys/time.h>
+#include<getopt.h>
+
+typedef enum { FALSE, TRUE } boolean;
 
 /* Function to get wall time */
 double cp_Wtime()
@@ -154,6 +157,31 @@ Storm read_storm_file(char *fname)
 
 	return storm;
 }
+
+boolean csv = FALSE;
+
+short processOptions(int argc, char *argv[])
+{
+	short optargc = 0;
+    char c;
+    while((c = getopt(argc, argv, "c:t:")) != -1)
+    {
+        switch(c)
+        {
+            case 'c': case 'C': 
+				csv = TRUE; 
+				if(optarg != NULL)
+				{
+					freopen(optarg, "w", stdout);
+					optargc++;
+				}
+				break;
+        }
+		optargc++;
+    }
+	return optargc;
+}
+
 
 /*
  * MAIN PROGRAM

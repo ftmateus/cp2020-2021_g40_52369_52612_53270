@@ -54,7 +54,7 @@ energy_storms_seq: energy_storms.c
 	$(CC) $(CFLAGS) $(DEBUG) -o $@ $< $(LIBS)
 
 energy_storms_omp: energy_storms_omp.c
-	$(CC) $(CFLAGS) $(DEBUG) $(OMPFLAG) -o $@ $< $(LIBS)
+	$(CC) $(CFLAGS) $(DEBUG) $(BENCHMARK_LAYER_INIT) $(OMPFLAG) -o $@ $< $(LIBS)
 
 # Remove the target files
 clean:
@@ -66,3 +66,6 @@ debug_seq:
 
 debug_omp:
 	make energy_storms_omp DEBUG=-DDEBUG
+	
+debug_omp_benchmark_layer_init:
+	make debug_omp BENCHMARK_LAYER_INIT=-DBENCHMARK_LAYER_INIT
