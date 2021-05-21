@@ -190,8 +190,8 @@ def run_tests(layer_size, test_files, n_runs = 2):
             s = start_energy_storms_program(layer_size, test_files, n_threads=t)
             if(samples != [] and not s.compareResults(samples[len(samples) - 1])):
                 print("\033[0;31mOutput mismatch! Differences:\033[0m")
-                samples[len(samples) - 1].printAll("Sample1.txt")
-                s.printAll("Sample2.txt")
+                samples[len(samples) - 1].printAll("Sample1_out.txt")
+                s.printAll("Sample2_out.txt")
                 subprocess.run(["diff", "Sample1_out.txt", "Sample2_out.txt"])
                 os.remove(CSV_FILENAME)
                 print("\033[0;31mAborting script...")
