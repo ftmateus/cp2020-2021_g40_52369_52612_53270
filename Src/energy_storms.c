@@ -18,6 +18,9 @@
 #include<stdlib.h>
 #include<math.h>
 #include<sys/time.h>
+#include<getopt.h>
+
+typedef enum { FALSE, TRUE } boolean;
 
 /* Function to get wall time */
 double cp_Wtime(){
@@ -132,25 +135,55 @@ Storm read_storm_file( char *fname ) {
     return storm;
 }
 
+boolean csv = FALSE;
+
+short processOptions(int argc, char *argv[])
+{
+	short optargc = 0;
+    char c;
+    while((c = getopt(argc, argv, "c:t:")) != -1)
+    {
+        switch(c)
+        {
+            case 'c': case 'C': 
+				csv = TRUE; 
+				if(optarg != NULL)
+				{
+					freopen(optarg, "w", stdout);
+					optargc++;
+				}
+				break;
+        }
+		optargc++;
+    }
+	return optargc;
+}
+
+
 /*
  * MAIN PROGRAM
  */
 int main(int argc, char *argv[]) {
     int i,j,k;
 
+    short optargc = processOptions(argc, argv);
+
     /* 1.1. Read arguments */
-    if (argc<3) {
-        fprintf(stderr,"Usage: %s <size> <storm_1_file> [ <storm_i_file> ] ... \n", argv[0] );
-        exit( EXIT_FAILURE );
-    }
+    if (argc - optargc < 3)
+	{
+		fprintf(stderr,
+				"Usage: %s <options> <size> <storm_1_file> [ <storm_i_file> ] ... \n",
+				argv[0]);
+		exit(EXIT_FAILURE);
+	}
 
-    int layer_size = atoi( argv[1] );
-    int num_storms = argc-2;
-    Storm storms[ num_storms ];
+	int layer_size = atoi(argv[optargc + 1]);
+	int num_storms = argc - optargc - 2;
+	Storm storms[num_storms];
 
-    /* 1.2. Read storms information */
-    for( i=2; i<argc; i++ ) 
-        storms[i-2] = read_storm_file( argv[i] );
+	/* 1.2. Read storms information */
+	for (i = 2 + optargc; i < argc; i++)
+		storms[i - (2 + optargc)] = read_storm_file(argv[i]);
 
     /* 1.3. Intialize maximum levels to zero */
     float maximum[ num_storms ];
@@ -227,13 +260,17 @@ int main(int argc, char *argv[]) {
 
     /* 7. Results output, used by the Tablon online judge software */
     printf("\n");
-    /* 7.1. Total computation time */
-    printf("Time: %lf\n", ttotal );
-    /* 7.2. Print the maximum levels */
-    printf("Result:");
-    for (i=0; i<num_storms; i++)
-        printf(" %d %f", positions[i], maximum[i] );
-    printf("\n");
+
+    char *separator = csv ? "," : " ";
+	/* 7.1. Total computation time */
+	printf("Time:%s", separator);
+	printf("%lf\n", ttotal);
+	/* 7.2. Print the maximum levels */
+	printf("Results:\n");
+
+	for (i = 0; i < num_storms; i++)
+		printf("%d%s%f\n", positions[i], separator,  maximum[i]);
+	printf("\n");
 
     /* 8. Free resources */    
     for( i=0; i<argc-2; i++ )

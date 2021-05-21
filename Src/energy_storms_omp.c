@@ -20,7 +20,7 @@
 #include<math.h>
 #include<sys/time.h>
 #include<omp.h>
-#include<omp.h>
+#include<getopt.h>
 
 #define DEFAULT_COLOR   "\033[0m"
 #define RED             "\033[0;31m"
@@ -267,7 +267,10 @@ int main(int argc, char *argv[]) {
         fprintf(stderr,"Error: Allocating the layer memory\n");
         exit( EXIT_FAILURE );
     }
+
+    #ifdef BENCHMARK_LAYER_INIT
     double initial = cp_Wtime();
+    #endif
 
     #pragma omp parallel for
     for(int kk = 0; kk<layer_size; kk++ ) 
@@ -275,10 +278,21 @@ int main(int argc, char *argv[]) {
         layer[kk] = 0.0f;
         layer_copy[kk] = 0.0f;
     }
-    
+
+    #ifdef BENCHMARK_LAYER_INIT
     double final = cp_Wtime();
 
     double result = final - initial;
+
+    char *sep = csv ? "," : " ";
+	/* 7.1. Total computation time */
+	printfColor(BLUE, "Time:%s", sep)
+	printf("%lf\n", result);
+
+    exit(0);
+
+    #endif
+    
 
     /* 4. Storms simulation */
     for( i=0; i<num_storms; i++) {
