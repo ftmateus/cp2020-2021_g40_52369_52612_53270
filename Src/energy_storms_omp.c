@@ -31,12 +31,15 @@
 #define CYAN            "\033[0;36m"
 #define WHITE           "\033[0;37m"
 
-typedef enum { FALSE, TRUE } boolean;
+typedef enum
+{
+	FALSE, TRUE
+} boolean;
 
 #define printfColor(color, format, ...) \
     {\
         if(isatty(fileno(stdout))) \
-            printf(color format DEFAULT_COLOR, ##__VA_ARGS__); \
+            printf(format, ##__VA_ARGS__); \
         else \
             printf(format, ##__VA_ARGS__);\
     }
@@ -57,7 +60,8 @@ double cp_Wtime()
 
 typedef float energy_t;
 
-#define THRESHOLD    0.001f
+//#define THRESHOLD    0.001f
+#define THRESHOLD    50.0f
 
 /* Structure used to store data for one storm of particles */
 typedef struct
@@ -83,20 +87,16 @@ void update(energy_t *layer, int layer_size, int k, int pos, energy_t energy)
 	/* NOTE: Real world atenuation typically depends on the square of the distance.
 	 We use here a tailored equation that affects a much wider range of cells */
 	float atenuacion = sqrtf((float) distance);
-
 	/* 4. Compute attenuated energy */
 	energy_t energy_k = energy / layer_size / atenuacion;
-
-
+	//printf("cell : %d\n", k);
+	//printf("energy : %f\n", energy);
+	//printf("energy received: %f\n", energy_k);
 	/* 5. Do not add if its absolute value is lower than the threshold */
 	if (energy_k >= THRESHOLD / layer_size
 			|| energy_k <= -THRESHOLD / layer_size)
 		layer[k] = layer[k] + energy_k;
-	else
-	{
-		//if(k>pos) stop cycle return 0;
-	}
-	//if the energy decreases below the threshold, then it's not worth to do more
+
 }
 
 /* ANCILLARY FUNCTIONS: These are not called from the code section which is measured, leave untouched */
@@ -215,48 +215,51 @@ boolean csv = FALSE;
 short processOptions(int argc, char *argv[])
 {
 	short optargc = 0;
-    char c;
-    while((c = getopt(argc, argv, "c:t:")) != -1)
-    {
-        switch(c)
-        {
-            case 'c': case 'C': 
-				csv = TRUE; 
-				if(optarg != NULL)
-				{
-					freopen(optarg, "w", stdout);
-					optargc++;
-				}
-				break;
-			case 't': case 'T': 
+	char c;
+	while ((c = getopt(argc, argv, "c:t:")) != -1)
+	{
+		switch (c)
+		{
+		case 'c':
+		case 'C':
+			csv = TRUE;
+			if (optarg != NULL)
 			{
-				int n_threads = atoi(optarg);
-
-				if (n_threads <= 0)
-				{
-					fprintf(stderr, "Invalid number of threads! %d\n", n_threads);
-					exit(1);
-				}
-
-				omp_set_num_threads(n_threads);
+				freopen(optarg, "w", stdout);
 				optargc++;
-				break;
 			}
-        }
+			break;
+		case 't':
+		case 'T':
+		{
+			int n_threads = atoi(optarg);
+
+			if (n_threads <= 0)
+			{
+				fprintf(stderr, "Invalid number of threads! %d\n", n_threads);
+				exit(1);
+			}
+
+			omp_set_num_threads(n_threads);
+			optargc++;
+			break;
+		}
+		}
 		optargc++;
-    }
+	}
 	return optargc;
 }
 
 /*
  * MAIN PROGRAM
  */
-int main(int argc, char *argv[]) {
-    int i,j,k;
+int main(int argc, char *argv[])
+{
+	int i, j, k;
 
 	short optargc = processOptions(argc, argv);
 
-   /* 1.1. Read arguments */
+	/* 1.1. Read arguments */
 	if (argc - optargc < 3)
 	{
 		fprintf(stderr,
@@ -273,23 +276,24 @@ int main(int argc, char *argv[]) {
 	for (i = 2 + optargc; i < argc; i++)
 		storms[i - (2 + optargc)] = read_storm_file(argv[i]);
 
-    /* 1.3. Intialize maximum levels to zero */
-    energy_t maximum[ num_storms ];
-    int positions[ num_storms ];
-    for (i=0; i<num_storms; i++) {
-        maximum[i] = 0.0f;
-        positions[i] = 0;
-    }
+	/* 1.3. Intialize maximum levels to zero */
+	energy_t maximum[num_storms];
+	int positions[num_storms];
+	for (i = 0; i < num_storms; i++)
+	{
+		maximum[i] = 0.0f;
+		positions[i] = 0;
+	}
 
-    /* 2. Begin time measurement */
-    double ttotal = cp_Wtime();
+	/* 2. Begin time measurement */
+	double ttotal = cp_Wtime();
 
-    /* START: Do NOT optimize/parallelize the code of the main program above this point */
+	/* START: Do NOT optimize/parallelize the code of the main program above this point */
 
-    /* 3. Allocate memory for the layer and initialize to zero */
+	/* 3. Allocate memory for the layer and initialize to zero */
 	energy_t *layer = (energy_t *) malloc(sizeof(energy_t) * layer_size);
 
-	if (layer == NULL || layer_copy == NULL)
+	if (layer == NULL)
 	{
 		fprintf(stderr, "Error: Allocating the layer memory\n");
 		exit(EXIT_FAILURE);
@@ -303,7 +307,6 @@ int main(int argc, char *argv[]) {
 	}
 
 	double final = cp_Wtime();
-
 
 	/* 4. Storms simulation */
 	for (i = 0; i < num_storms; i++)
@@ -320,13 +323,25 @@ int main(int argc, char *argv[]) {
 			int position = storms[i].posval[j * 2];
 
 			/* For each cell in the layer */
-			//o(l)
 			//atenuation = energy/layer_size/THRESHOLD
-				//atenuation*atenuation = distanceMax
-				//if(pos+distanceMax>layer_size) max = layer_size-1 else max = pos+distanceMax
-				//if(pos-distanceMax<0) min = 0 else min = pos-distanceMax
+			//atenuation*atenuation = distanceMax
+			//if(pos+distanceMax>layer_size) max = layer_size-1 else max = pos+distanceMax
+			//if(pos-distanceMax<0) min = 0 else min = pos-distanceMax
+			float atenuation = energy / THRESHOLD;
+			int distanceMax = (int) atenuation * atenuation;
+
+			if (distanceMax < 0)
+				distanceMax = -distanceMax;
+
+			distanceMax--;
+			int max = position + distanceMax, min = position - distanceMax;
+			if (max > layer_size || max < 0)
+				max = layer_size;
+			if (min > layer_size || min < 0)
+				min = 0;
+
 #pragma omp paralell for
-			for (k = 0; k < layer_size; k++)
+			for (k = min; k < max; k++)
 			{
 
 				/* Update the energy value for the cell */
@@ -337,9 +352,9 @@ int main(int argc, char *argv[]) {
 		//total = O(p*(l/t))
 		/* 4.2. Energy relaxation between storms */
 		/* 4.2.1. Copy values to the ancillary array */
-
+//make a lock to get all the ancillary cells of each thread
 		int previousNeighbor = 0;
-		int LastNeighbor=100;
+		int LastNeighbor = 100;
 		/* 4.2.2. Update layer using the ancillary values.
 		 Skip updating the first and last positions */
 
@@ -347,6 +362,7 @@ int main(int argc, char *argv[]) {
 		for (k = 1; k < layer_size - 1; k++)//TODO k not =1, depending on thread
 		//TODO nextPreviousNeighbor = layer[k-1] wouldn't work, because a thread might end before another starts
 		{
+
 			int nextPreviousNeighbor = layer[k];
 
 			layer[k] = (previousNeighbor + layer[k] + layer[k + 1]) / 3;//layer[k+1] doesn't work for last element of layer in thread
@@ -359,25 +375,53 @@ int main(int argc, char *argv[]) {
 			}
 		}
 		//layer[k] = (previousNeighbor + layer[k] + layer[last) / 3;
-		/* 4.3. Locate the maximum value in the layer, and its position */
+		/* 4.3. Locate the maximum value in the layer, and its position
+		 /*
+		 float *layer_copy = (float *) malloc(sizeof(float) * layer_size);
+		 for (k = 0; k < layer_size; k++)
+		 layer_copy[k] = 0.0f;
+//
+//		 /* 4.2. Energy relaxation between storms */
+//		/* 4.2.1. Copy values to the ancillary array */
+//		for (k = 0; k < layer_size; k++)
+//			layer_copy[k] = layer[k];
+//
+//		/* 4.2.2. Update layer using the ancillary values.
+//		 Skip updating the first and last positions */
+//		for (k = 1; k < layer_size - 1; k++)
+//			layer[k] = (layer_copy[k - 1] + layer_copy[k] + layer_copy[k + 1])
+//					/ 3;
+//
+//		/* 4.3. Locate the maximum value in the layer, and its position */
+//		for (k = 1; k < layer_size - 1; k++)
+//		{
+//			/* Check it only if it is a local maximum */
+//			if (layer[k] > layer[k - 1] && layer[k] > layer[k + 1])
+//			{
+//				if (layer[k] > maximum[i])
+//				{
+//					maximum[i] = layer[k];
+//					positions[i] = k;
+//				}
+//			}
+//		}
+//	}
+//	*/
+	/* END: Do NOT optimize/parallelize the code below this point */
 
-	}
+	/* 5. End time measurement */
+	ttotal = cp_Wtime() - ttotal;
 
-    /* END: Do NOT optimize/parallelize the code below this point */
-
-    /* 5. End time measurement */
-    ttotal = cp_Wtime() - ttotal;
-
-    /* 6. DEBUG: Plot the result (only for layers up to 35 points) */
-    #ifdef DEBUG
+	/* 6. DEBUG: Plot the result (only for layers up to 35 points) */
+#ifdef DEBUG
 	if(!csv)
-    	debug_print( layer_size, layer, positions, maximum, num_storms, storms);
-    #endif
+	debug_print( layer_size, layer, positions, maximum, num_storms, storms);
+#endif
 
-    /* 7. Results output, used by the Tablon online judge software */
-    printf("\n");
+	/* 7. Results output, used by the Tablon online judge software */
+	printf("\n");
 
-    char *separator = csv ? "," : " ";
+	char *separator = csv ? "," : " ";
 	/* 7.1. Total computation time */
 	printfColor(BLUE, "Time:%s", separator)
 	printf("%lf\n", ttotal);
@@ -385,14 +429,14 @@ int main(int argc, char *argv[]) {
 	printfColor(BLUE, "Results:\n")
 
 	for (i = 0; i < num_storms; i++)
-		printf("%d%s%f\n", positions[i], separator,  maximum[i]);
+		printf("%d%s%f\n", positions[i], separator, maximum[i]);
 	printf("\n");
 
-    /* 8. Free resources */    
-    for( i=0; i<argc-2; i++ )
-        free( storms[i].posval );
+	/* 8. Free resources */
+	for (i = 0; i < argc - 2; i++)
+		free(storms[i].posval);
 
-    /* 9. Program ended successfully */
-    return 0;
+	/* 9. Program ended successfully */
+	return 0;
 }
 
