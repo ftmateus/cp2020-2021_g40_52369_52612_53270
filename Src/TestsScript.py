@@ -16,10 +16,11 @@ PLOTS_FOLDER = "plots/"
 ENERGY_STORMS_OMP_EXEC = "./energy_storms_omp"
 ENERGY_STORMS_SEQ_EXEC = "./energy_storms_seq"
 
-MAX_THREADS = os.cpu_count() + 2
+MAX_THREADS = os.cpu_count()# + 2
 
 class ProgramResultsSample:
-    def __init__(self, layer_size, n_threads, test_files, time, results):
+    def __init__(self, program, layer_size, n_threads, test_files, time, results):
+        self.program    = program
         self.time       = time
         self.layer_size = layer_size
         self.results    = results
@@ -31,6 +32,7 @@ class ProgramResultsSample:
         if(towrite != sys.stdout):
             sys.stdout = open(towrite, 'w')
 
+        print("Program: ",      self.program)
         print("Time: ",         self.time)
         print("Layer size: ",   self.layer_size)
         print("Threads: ",      self.n_threads)
@@ -54,7 +56,7 @@ class ProgramResultsSample:
         
         return True
 
-class SamplesStats:
+class OMPSamplesStats:
     def __init__(self, samples):
         self.samples = samples
         self.meanTime = [0 for _ in range(MAX_THREADS)]
@@ -69,7 +71,7 @@ class SamplesStats:
     def _computeMeanTime(self):
         times = [[] for _ in range(MAX_THREADS)]
 
-        for i, s in enumerate(samples):
+        for i, s in enumerate(self.samples):
             times[s.n_threads - 1].append(s.time)
             
         for i, tl in enumerate(times):
@@ -105,7 +107,7 @@ def get_test_files(regex_expr = "test_*"):
 
     return test_files
 
-def start_energy_storms_program(layer_size, test_files, n_threads = 1, program = "default"):
+def start_energy_storms_program(program, layer_size, test_files, n_threads = 1):
     def parse_results():
         output_arr = []
         with open(CSV_FILENAME, "r") as csv_file:
@@ -119,7 +121,7 @@ def start_energy_storms_program(layer_size, test_files, n_threads = 1, program =
         time = float(output_arr[0][1])
         results = np.array(output_arr[2:])
 
-        results = ProgramResultsSample(layer_size, n_threads, test_files, time, results)
+        results = ProgramResultsSample(program, layer_size, n_threads, test_files, time, results)
 
         return results
 
@@ -127,16 +129,14 @@ def start_energy_storms_program(layer_size, test_files, n_threads = 1, program =
 
     proc = None
 
-    if(program == "default"):
-        if(n_threads == 1):
-            proc = subprocess.run([ENERGY_STORMS_SEQ_EXEC, "-c", CSV_FILENAME, 
-                            str(layer_size)] + test_files)
-        else:
-            proc = subprocess.run([ENERGY_STORMS_OMP_EXEC, "-c", CSV_FILENAME, 
-                            "-t", str(n_threads), str(layer_size)] + test_files)
-    else:
+    if(program == ENERGY_STORMS_OMP_EXEC):
         proc = subprocess.run([program, "-c", CSV_FILENAME, 
                             "-t", str(n_threads), str(layer_size)] + test_files)
+    elif(program == ENERGY_STORMS_SEQ_EXEC):
+        proc = subprocess.run([program, "-c", CSV_FILENAME, 
+                            str(layer_size)] + test_files)
+    else:
+        assert False
 
     if proc.returncode != 0:
         print("\033[0;31mError while executing program! Aborting script...")
@@ -148,10 +148,8 @@ def start_energy_storms_program(layer_size, test_files, n_threads = 1, program =
 
 
 #nthreads (x) and time (y)
-def plot_results_nthreads_time(plot_name, samples, layer_size):
+def plot_results_nthreads_time(plot_name, layer_size, SEQsamples = [], OMPsamples= []):
     #plt.figure(figsize=(8,8), frameon=True)
-
-    x = np.arange(1, MAX_THREADS + 1)
 
     figure, (timesPlt, otherstatsPlt) = plt.subplots(2)
 
@@ -159,64 +157,80 @@ def plot_results_nthreads_time(plot_name, samples, layer_size):
 
     otherstatsPlt.xaxis.set_major_locator(MaxNLocator(integer=True))
 
-    stats = SamplesStats(samples)
+    stats = OMPSamplesStats(OMPsamples)
 
     timesPlt.set_title("Layer size: " + str(layer_size))
 
     timesPlt.set_ylabel("Mean time (in seconds)")
     
-    timesPlt.bar(x, stats.meanTime)
+    SEQsamplesMeanTime = np.mean(list(map(lambda x: x.time, SEQsamples)))
+
+    OMPxAxe = list(map(lambda x: " OMP-" + str(x),np.arange(1, MAX_THREADS + 1)))
+
+    timesPlt.bar(["SEQ"], [SEQsamplesMeanTime], color="red")
+
+    timesPlt.bar(OMPxAxe, stats.meanTime, color="blue")
 
     otherstatsPlt.set_xlabel("Number of Threads")
 
-    otherstatsPlt.plot(x, stats.speedUp, color='r', label = "SpeedUp")
+    otherstatsPlt.plot(OMPxAxe, stats.speedUp, color='r', label = "SpeedUp")
 
-    otherstatsPlt.plot(x, stats.efficiency, color='g', label = "Efficiency")
+    otherstatsPlt.plot(OMPxAxe, stats.efficiency, color='g', label = "Efficiency")
 
-    otherstatsPlt.plot(x, stats.cost, color='b', label = "Cost")
+    otherstatsPlt.plot(OMPxAxe, stats.cost, color='b', label = "Cost")
     
     otherstatsPlt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.10),
           ncol=3, fancybox=True, shadow=True)
 
-    
-
     plt.savefig(PLOTS_FOLDER + plot_name)
     plt.close()
 
-def run_tests(layer_size, test_files, n_runs = 2, program="default"):
+def run_tests(layer_size, test_files, n_runs = 2):
+    def _checkResults(newSample, lastSample):
+        if(lastSample != None and not newSample.compareResults(lastSample)):
+            print("\033[0;31mOutput mismatch! Differences:\033[0m")
+            lastSample.printAll("Sample1_out.txt")
+            newSample.printAll("Sample2_out.txt")
+            subprocess.run(["diff", "Sample1_out.txt", "Sample2_out.txt"])
+            os.remove(CSV_FILENAME)
+            print("\033[0;31mAborting script...")
+            exit(1)
 
-    samples = []
+    SEQsamples = []
+    OMPsamples = []
 
+    print("Testing original program")
+    for r in range(n_runs):
+        print( r + 1, "\r", end = '')
+        newSample =  start_energy_storms_program(ENERGY_STORMS_SEQ_EXEC, layer_size, test_files)
+        lastSample = None if SEQsamples == [] else SEQsamples[len(SEQsamples) - 1]
+        _checkResults(newSample, lastSample)
+        SEQsamples.append(newSample)
+
+    print("Executing OMP program")
     for t in range (1, MAX_THREADS + 1):
         print(t, "thread(s)")
         for r in range(n_runs):
             print( r + 1, "\r", end = '')
-            s = start_energy_storms_program(layer_size, test_files, n_threads=t)
-            if(samples != [] and not s.compareResults(samples[len(samples) - 1])):
-                print("\033[0;31mOutput mismatch! Differences:\033[0m")
-                samples[len(samples) - 1].printAll("Sample1_out.txt")
-                s.printAll("Sample2_out.txt")
-                subprocess.run(["diff", "Sample1_out.txt", "Sample2_out.txt"])
-                os.remove(CSV_FILENAME)
-                print("\033[0;31mAborting script...")
-                exit(1)
-            samples.append(s)
-    return samples
+            newSample =  start_energy_storms_program(ENERGY_STORMS_OMP_EXEC, layer_size, test_files, n_threads=t)
+            lastSample = SEQsamples[len(SEQsamples) - 1] if OMPsamples == [] else OMPsamples[len(OMPsamples) - 1]
+            _checkResults(newSample, lastSample)
+            OMPsamples.append(newSample)
+            
+    return SEQsamples, OMPsamples
 
 #################MAIN##################
 
 all_test_files = get_test_files()
 
-layer_size = 10000000
+layer_size = 100000000
 
 # samples = run_tests(layer_size, all_test_files, n_runs = 5)
 
-samples = run_tests(layer_size, 
-["test_files/test_01_a35_p7_w2",
-"test_files/test_01_a35_p5_w3",
-"test_files/test_01_a35_p8_w1"], n_runs = 5)
+SEQsamples, OMPsamples = run_tests(layer_size, 
+["test_files/test_09_a16-17_p3_w1"], n_runs = 1)
 
-plot_results_nthreads_time("plot_init_arrays_speedup", samples, layer_size)
+plot_results_nthreads_time("plot_init_arrays_speedup", layer_size, SEQsamples, OMPsamples)
 
 print("\033[0;32mTest complete!")
 

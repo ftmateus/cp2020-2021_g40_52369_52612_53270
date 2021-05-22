@@ -101,7 +101,8 @@ dkms.conf
 .LSOverride
 
 # Icon must end with two \r
-Icon
+Icon
+
 
 # Thumbnails
 ._*
@@ -164,9 +165,7 @@ $RECYCLE.BIN/
 .nfs*
 
 # End of https://www.toptal.com/developers/gitignore/api/c,c++,macos,windows,linux
-<<<<<<< HEAD
-/Debug/
-=======
 
 Src/Sample*_out.txt
->>>>>>> dev
+
+Src/callgrind.out.*

@@ -60,8 +60,7 @@ double cp_Wtime()
 
 typedef float energy_t;
 
-//#define THRESHOLD    0.001f
-#define THRESHOLD     0.001f
+#define THRESHOLD    0.001f
 
 /* Structure used to store data for one storm of particles */
 typedef struct
@@ -291,11 +290,15 @@ int main(int argc, char *argv[])
 	}
 	double initial = cp_Wtime();
 
-	#pragma omp parallel for
-	for (int kk = 0; kk < layer_size; kk++)
-	{
-		layer[kk] = 0.0f;
+	#pragma omp parallel num_threads(n_threads)
+	{	
+		#pragma omp for
+		for (int kk = 0; kk < layer_size; kk++)
+		{
+			layer[kk] = 0.0f;
+		}
 	}
+	
 
 	double final = cp_Wtime();
 
@@ -319,24 +322,20 @@ int main(int argc, char *argv[])
 				//if(pos+distanceMax>layer_size) max = layer_size-1 else max = pos+distanceMax
 				//if(pos-distanceMax<0) min = 0 else min = pos-distanceMax
 				float atenuation = energy / THRESHOLD;
-				long distanceMax = (long) atenuation * atenuation;
+				unsigned long distanceMax = (unsigned long) atenuation * atenuation;
 
-				assert(distanceMax >= 0);
 				// if (distanceMax < 0)
 				// 	distanceMax = -distanceMax;
 
 				distanceMax--;
-				long max = position + distanceMax, 
-				min = position - distanceMax;
+
+				//to avoid overflows/underflows
+				int max = distanceMax >= layer_size ? layer_size : position + distanceMax;
+				int min = distanceMax >= position ? 0 : position - distanceMax;
 
 				assert(min <= layer_size);
 				assert(max >= 0);
-
-				if (max > layer_size)
-					max = layer_size;
-				if (min < 0)
-					min = 0;
-
+			
 				#pragma omp parallel num_threads(n_threads)
 				{
 					//fprintf(stderr, "%d\n", omp_get_num_threads());
@@ -438,6 +437,9 @@ int main(int argc, char *argv[])
 	/* 8. Free resources */
 	for (i = 0; i < argc - 2; i++)
 		free(storms[i].posval);
+	
+	free(layer);
+	free(layer_copy);
 
 	/* 9. Program ended successfully */
 	return 0;
