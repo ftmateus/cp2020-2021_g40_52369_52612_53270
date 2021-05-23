@@ -16,7 +16,7 @@ PLOTS_FOLDER = "plots/"
 ENERGY_STORMS_OMP_EXEC = "./energy_storms_omp"
 ENERGY_STORMS_SEQ_EXEC = "./energy_storms_seq"
 
-MAX_THREADS = os.cpu_count()# + 2
+MAX_THREADS = 1#os.cpu_count()# + 2
 
 class ProgramResultsSample:
     def __init__(self, program, layer_size, n_threads, test_files, time, results):
@@ -185,7 +185,7 @@ def plot_results_nthreads_time(plot_name, layer_size, SEQsamples = [], OMPsample
     plt.savefig(PLOTS_FOLDER + plot_name)
     plt.close()
 
-def run_tests(layer_size, test_files, n_runs = 2):
+def run_tests(layer_size, test_files, n_runs = 2, test_original_program = True):
     def _checkResults(newSample, lastSample):
         if(lastSample != None and not newSample.compareResults(lastSample)):
             print("\033[0;31mOutput mismatch! Differences:\033[0m")
@@ -199,23 +199,29 @@ def run_tests(layer_size, test_files, n_runs = 2):
     SEQsamples = []
     OMPsamples = []
 
-    print("Testing original program")
-    for r in range(n_runs):
-        print( r + 1, "\r", end = '')
-        newSample =  start_energy_storms_program(ENERGY_STORMS_SEQ_EXEC, layer_size, test_files)
-        lastSample = None if SEQsamples == [] else SEQsamples[len(SEQsamples) - 1]
-        _checkResults(newSample, lastSample)
-        SEQsamples.append(newSample)
+    newSample = None
+    lastSample = None
 
-    print("Executing OMP program")
+    if(test_original_program):
+        print("Testing original program")
+        for r in range(n_runs):
+            print( r + 1, "\r", end = '')
+            newSample =  start_energy_storms_program(ENERGY_STORMS_SEQ_EXEC, layer_size, test_files)
+            _checkResults(newSample, lastSample)
+            SEQsamples.append(newSample)
+            lastSample = newSample
+
+        
+
+    print("Testing OMP program")
     for t in range (1, MAX_THREADS + 1):
         print(t, "thread(s)")
         for r in range(n_runs):
             print( r + 1, "\r", end = '')
             newSample =  start_energy_storms_program(ENERGY_STORMS_OMP_EXEC, layer_size, test_files, n_threads=t)
-            lastSample = SEQsamples[len(SEQsamples) - 1] if OMPsamples == [] else OMPsamples[len(OMPsamples) - 1]
             _checkResults(newSample, lastSample)
             OMPsamples.append(newSample)
+            lastSample = newSample
             
     return SEQsamples, OMPsamples
 
@@ -223,7 +229,7 @@ def run_tests(layer_size, test_files, n_runs = 2):
 
 all_test_files = get_test_files()
 
-layer_size = 100000000
+layer_size = 1000000
 
 # samples = run_tests(layer_size, all_test_files, n_runs = 5)
 

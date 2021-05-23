@@ -281,7 +281,6 @@ int main(int argc, char *argv[])
 
 	/* 3. Allocate memory for the layer and initialize to zero */
 	energy_t *layer = (energy_t *) malloc(sizeof(energy_t) * layer_size);
-	energy_t *layer_copy = (energy_t *) malloc(sizeof(energy_t) * layer_size);
 
 	if (layer == NULL)
 	{
@@ -290,14 +289,14 @@ int main(int argc, char *argv[])
 	}
 	double initial = cp_Wtime();
 
-	#pragma omp parallel num_threads(n_threads)
-	{	
-		#pragma omp for
+	// #pragma omp parallel num_threads(n_threads)
+	// {	
+		#pragma omp for simd
 		for (int kk = 0; kk < layer_size; kk++)
 		{
 			layer[kk] = 0.0f;
 		}
-	}
+	//}
 	
 
 	double final = cp_Wtime();
@@ -349,42 +348,70 @@ int main(int argc, char *argv[])
 					}
 				}
 			}
-		//total = O(p*(l/t))
+		
+
 		/* 4.2. Energy relaxation between storms */
-		/* 4.2.1. Copy values to the ancillary array */
-//make a lock to get all the ancillary cells of each thread
-
-		#ifdef NOOOO
-		int previousNeighbor = 0;
-		int LastNeighbor = 100;
-		/* 4.2.2. Update layer using the ancillary values.
-		 Skip updating the first and last positions */
-
-		#pragma omp paralell for private(previousNeighbor)
-		for (k = 1; k < layer_size - 1; k++)//TODO k not =1, depending on thread
-		//TODO nextPreviousNeighbor = layer[k-1] wouldn't work, because a thread might end before another starts
+		#ifndef AFTER
+		#pragma omp parallel num_threads(n_threads)
 		{
 
-			int nextPreviousNeighbor = layer[k];
+			fprintf(stderr, "Thread number is %d\n", omp_get_thread_num());
 
-			layer[k] = (previousNeighbor + layer[k] + layer[k + 1]) / 3;//layer[k+1] doesn't work for last element of layer in thread
-			previousNeighbor = nextPreviousNeighbor;
+			int PreviousFirstCellIndex = 1 + ((layer_size - 2)/n_threads)*omp_get_thread_num() - 1;
+			int PreviousLastCellIndex = 1 + ((layer_size - 2)/n_threads)*(omp_get_thread_num() + 1);
 
-			if (layer[k] > maximum[i])
+			energy_t *PreviousFirstCell = 	&layer[PreviousFirstCellIndex];
+			energy_t *PreviousLastCell  = 	&layer[PreviousLastCellIndex];
+
+			if(n_threads == 1) 
 			{
-				maximum[i] = layer[k];
-				positions[i] = k;
+				assert(*PreviousLastCell == layer[layer_size - 1]);
+				assert(PreviousLastCellIndex == layer_size - 1);
+			}
+
+			/* 4.2.2. Update layer using the ancillary values.
+			Skip updating the first and last positions */
+
+			energy_t nextPreviousNeighbor = *PreviousFirstCell;
+
+			#pragma omp barrier
+
+			boolean printFirst = FALSE;
+			boolean reached = FALSE;
+
+			#pragma omp for// private(k)
+			for (k = 1; k < layer_size - 1; k++)//TODO k not =1, depending on thread
+			//TODO nextPreviousNeighbor = layer[k-1] wouldn't work, because a thread might end before another starts
+			{
+				assert(!reached);
+				assert(nextPreviousNeighbor == layer[k-1]);
+				if(!printFirst)
+				{
+					fprintf(stderr, "First k: %d Thread: %d\n", k, omp_get_thread_num());
+					assert(&layer[k - 1] == PreviousFirstCell);
+					printFirst = TRUE;
+				}
+
+				if(&layer[k + 1] == PreviousLastCell) 
+				{
+					fprintf(stderr, "At %d. Thread: %d\n", k, omp_get_thread_num());
+					assert(k + 1 == PreviousLastCellIndex);
+
+					layer[k] = (nextPreviousNeighbor + layer[k] + *PreviousLastCell)/3;
+					reached = TRUE;
+				}
+				else
+				{
+					layer[k] = (nextPreviousNeighbor + layer[k] + layer[k + 1])/3;//layer[k+1] doesn't work for last element of layer in thread
+				}	
+
+				nextPreviousNeighbor = layer[k];
 			}
 		}
-		#endif
-		//layer[k] = (previousNeighbor + layer[k] + layer[last) / 3;
-		/* 4.3. Locate the maximum value in the layer, and its position
-		 /*
-		 float *layer_copy = (float *) malloc(sizeof(float) * layer_size);
-		 for (k = 0; k < layer_size; k++)
-		 layer_copy[k] = 0.0f;
+		
+		#else //BEFORE
+		energy_t *layer_copy = (energy_t *) malloc(sizeof(energy_t) * layer_size);
 
-		 /* 4.2. Energy relaxation between storms */
 		/* 4.2.1. Copy values to the ancillary array */
 		for (k = 0; k < layer_size; k++)
 			layer_copy[k] = layer[k];
@@ -395,6 +422,9 @@ int main(int argc, char *argv[])
 			layer[k] = (layer_copy[k - 1] + layer_copy[k] + layer_copy[k + 1])
 					/ 3;
 
+		free(layer_copy);
+		#endif
+		
 		/* 4.3. Locate the maximum value in the layer, and its position */
 		for (k = 1; k < layer_size - 1; k++)
 		{
@@ -439,7 +469,6 @@ int main(int argc, char *argv[])
 		free(storms[i].posval);
 	
 	free(layer);
-	free(layer_copy);
 
 	/* 9. Program ended successfully */
 	return 0;

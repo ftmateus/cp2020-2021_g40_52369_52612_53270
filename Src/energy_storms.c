@@ -30,7 +30,7 @@ double cp_Wtime(){
 }
 
 
-#define THRESHOLD    0.001f
+#define THRESHOLD    50.0f
 
 /* Structure used to store data for one storm of particles */
 typedef struct {
