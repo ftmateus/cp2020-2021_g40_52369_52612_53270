@@ -9,6 +9,15 @@ from matplotlib.ticker import MaxNLocator
 
 plt.style.use('default')
 
+DEFAULT_COLOR   = "\033[0m"
+RED             = "\033[0;31m"
+GREEN           = "\033[0;32m"
+YELLOW          = "\033[0;33m"
+BLUE            = "\033[0;34m"
+PURPLE          = "\033[0;35m"
+CYAN            = "\033[0;36m"
+WHITE           = "\033[0;37m"
+
 CSV_FILENAME = ".out.csv"
 
 PLOTS_FOLDER = "plots/"
@@ -16,7 +25,7 @@ PLOTS_FOLDER = "plots/"
 ENERGY_STORMS_OMP_EXEC = "./energy_storms_omp"
 ENERGY_STORMS_SEQ_EXEC = "./energy_storms_seq"
 
-MAX_THREADS = 1#os.cpu_count()# + 2
+MAX_THREADS = 6
 
 class ProgramResultsSample:
     def __init__(self, program, layer_size, n_threads, test_files, time, results):
@@ -26,6 +35,7 @@ class ProgramResultsSample:
         self.results    = results
         self.n_threads  = n_threads
         self.test_files = test_files
+        self.stderr_out = None
 
     def printAll(self, towrite=sys.stdout):
         oldstdout = sys.stdout
@@ -139,7 +149,7 @@ def start_energy_storms_program(program, layer_size, test_files, n_threads = 1):
         assert False
 
     if proc.returncode != 0:
-        print("\033[0;31mError while executing program! Aborting script...")
+        print(RED + "Error while executing program! Aborting script..." + DEFAULT_COLOR)
         os.remove(CSV_FILENAME)
         exit(1)
 
@@ -151,7 +161,7 @@ def start_energy_storms_program(program, layer_size, test_files, n_threads = 1):
 def plot_results_nthreads_time(plot_name, layer_size, SEQsamples = [], OMPsamples= []):
     #plt.figure(figsize=(8,8), frameon=True)
 
-    figure, (timesPlt, otherstatsPlt) = plt.subplots(2)
+    figure, (timesPlt, otherstatsPlt) = plt.subplots(2, figsize=(10,8))
 
     timesPlt.xaxis.set_major_locator(MaxNLocator(integer=True))
 
@@ -179,7 +189,7 @@ def plot_results_nthreads_time(plot_name, layer_size, SEQsamples = [], OMPsample
 
     otherstatsPlt.plot(OMPxAxe, stats.cost, color='b', label = "Cost")
     
-    otherstatsPlt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.10),
+    otherstatsPlt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15),
           ncol=3, fancybox=True, shadow=True)
 
     plt.savefig(PLOTS_FOLDER + plot_name)
@@ -188,12 +198,12 @@ def plot_results_nthreads_time(plot_name, layer_size, SEQsamples = [], OMPsample
 def run_tests(layer_size, test_files, n_runs = 2, test_original_program = True):
     def _checkResults(newSample, lastSample):
         if(lastSample != None and not newSample.compareResults(lastSample)):
-            print("\033[0;31mOutput mismatch! Differences:\033[0m")
+            print(RED + "Output mismatch! Differences:" + DEFAULT_COLOR)
             lastSample.printAll("Sample1_out.txt")
             newSample.printAll("Sample2_out.txt")
             subprocess.run(["diff", "Sample1_out.txt", "Sample2_out.txt"])
             os.remove(CSV_FILENAME)
-            print("\033[0;31mAborting script...")
+            print(RED + "Aborting script..." + DEFAULT_COLOR)
             exit(1)
 
     SEQsamples = []
@@ -215,7 +225,7 @@ def run_tests(layer_size, test_files, n_runs = 2, test_original_program = True):
 
     print("Testing OMP program")
     for t in range (1, MAX_THREADS + 1):
-        print(t, "thread(s)")
+        print(BLUE + str(t) + " thread(s)" + DEFAULT_COLOR)
         for r in range(n_runs):
             print( r + 1, "\r", end = '')
             newSample =  start_energy_storms_program(ENERGY_STORMS_OMP_EXEC, layer_size, test_files, n_threads=t)
@@ -227,17 +237,22 @@ def run_tests(layer_size, test_files, n_runs = 2, test_original_program = True):
 
 #################MAIN##################
 
+PLOT_FILE = "plot_init_arrays_speedup"
+
 all_test_files = get_test_files()
 
-layer_size = 1000000
+layer_size = 55511973
 
 # samples = run_tests(layer_size, all_test_files, n_runs = 5)
 
 SEQsamples, OMPsamples = run_tests(layer_size, 
-["test_files/test_09_a16-17_p3_w1"], n_runs = 1)
+["test_files/test_09_a16-17_p3_w1"], n_runs = 5)
 
-plot_results_nthreads_time("plot_init_arrays_speedup", layer_size, SEQsamples, OMPsamples)
+# SEQsamples, OMPsamples = run_tests(layer_size, 
+# all_test_files, n_runs = 5)
 
-print("\033[0;32mTest complete!")
+plot_results_nthreads_time(PLOT_FILE, layer_size, SEQsamples, OMPsamples)
+
+print("\033[0;32mTest complete! Plot saved on file", PLOT_FILE)
 
 os.remove(CSV_FILENAME)

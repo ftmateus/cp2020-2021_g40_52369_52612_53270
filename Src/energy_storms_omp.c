@@ -62,6 +62,8 @@ typedef float energy_t;
 
 #define THRESHOLD    0.001f
 
+#undef ENERGY_RELAXATION_BEFORE
+
 /* Structure used to store data for one storm of particles */
 typedef struct
 {
@@ -239,12 +241,39 @@ short processOptions(int argc, char *argv[])
 	return optargc;
 }
 
+
+void energy_relaxation(energy_t *layer, int layer_size)
+{
+	int PreviousFirstCellIndex 	= omp_get_thread_num() + ((layer_size - 1)/n_threads)*omp_get_thread_num();
+	int PreviousLastCellIndex 	= (omp_get_thread_num() + 1) + ((layer_size - 1)/n_threads)*(omp_get_thread_num() + 1);
+
+	energy_t *PreviousFirstCell = 	&layer[PreviousFirstCellIndex];
+	energy_t *PreviousLastCell  = 	&layer[PreviousLastCellIndex];
+
+	energy_t nextPreviousNeighbor = *PreviousFirstCell;
+
+	#pragma omp for
+	for (int k = 1; k < layer_size - 1; k++)
+	{
+		energy_t oldCurrent = layer[k];
+
+		if(&layer[k + 1] == PreviousLastCell) 
+			layer[k] = (nextPreviousNeighbor + layer[k] + *PreviousLastCell)/3;
+		else
+			layer[k] = (nextPreviousNeighbor + layer[k] + layer[k + 1])/3;
+
+		nextPreviousNeighbor = oldCurrent;
+	}
+}
+
 /*
  * MAIN PROGRAM
  */
 int main(int argc, char *argv[])
 {
 	int i, j, k;
+
+	n_threads = omp_get_num_threads();
 
 	short optargc = processOptions(argc, argv);
 
@@ -282,6 +311,10 @@ int main(int argc, char *argv[])
 	/* 3. Allocate memory for the layer and initialize to zero */
 	energy_t *layer = (energy_t *) malloc(sizeof(energy_t) * layer_size);
 
+	#ifdef ENERGY_RELAXATION_BEFORE
+	energy_t *layer_copy = (energy_t *) malloc(sizeof(energy_t) * layer_size);
+	#endif
+
 	if (layer == NULL)
 	{
 		fprintf(stderr, "Error: Allocating the layer memory\n");
@@ -295,6 +328,10 @@ int main(int argc, char *argv[])
 		for (int kk = 0; kk < layer_size; kk++)
 		{
 			layer[kk] = 0.0f;
+
+			#ifdef ENERGY_RELAXATION_BEFORE
+			layer_copy[kk] = 0.00f;
+			#endif
 		}
 	//}
 	
@@ -337,8 +374,8 @@ int main(int argc, char *argv[])
 			
 				#pragma omp parallel num_threads(n_threads)
 				{
-					//fprintf(stderr, "%d\n", omp_get_num_threads());
-					//fprintf(stderr, "%d\n", omp_get_num_teams());
+					/* 4.2.2. Update layer using the ancillary values.
+						Skip updating the first and last positions */
 
 					#pragma omp for
 					for (k = min; k < max; k++)
@@ -351,93 +388,44 @@ int main(int argc, char *argv[])
 		
 
 		/* 4.2. Energy relaxation between storms */
-		#ifndef AFTER
-		#pragma omp parallel num_threads(n_threads)
-		{
+		#ifndef ENERGY_RELAXATION_BEFORE //code below is after 
 
-			fprintf(stderr, "Thread number is %d\n", omp_get_thread_num());
-
-			int PreviousFirstCellIndex = 1 + ((layer_size - 2)/n_threads)*omp_get_thread_num() - 1;
-			int PreviousLastCellIndex = 1 + ((layer_size - 2)/n_threads)*(omp_get_thread_num() + 1);
-
-			energy_t *PreviousFirstCell = 	&layer[PreviousFirstCellIndex];
-			energy_t *PreviousLastCell  = 	&layer[PreviousLastCellIndex];
-
-			if(n_threads == 1) 
+			#pragma omp parallel num_threads(n_threads)
 			{
-				assert(*PreviousLastCell == layer[layer_size - 1]);
-				assert(PreviousLastCellIndex == layer_size - 1);
+				energy_relaxation(&layer[0], layer_size);
 			}
+		
+		#else //code below is before
+			/* 4.2.1. Copy values to the ancillary array */
+			for (k = 0; k < layer_size; k++)
+				layer_copy[k] = layer[k];
 
 			/* 4.2.2. Update layer using the ancillary values.
 			Skip updating the first and last positions */
+			for (k = 1; k < layer_size - 1; k++)
+				layer[k] = (layer_copy[k - 1] + layer_copy[k] + layer_copy[k + 1])
+						/ 3;
 
-			energy_t nextPreviousNeighbor = *PreviousFirstCell;
-
-			#pragma omp barrier
-
-			boolean printFirst = FALSE;
-			boolean reached = FALSE;
-
-			#pragma omp for// private(k)
-			for (k = 1; k < layer_size - 1; k++)//TODO k not =1, depending on thread
-			//TODO nextPreviousNeighbor = layer[k-1] wouldn't work, because a thread might end before another starts
-			{
-				assert(!reached);
-				assert(nextPreviousNeighbor == layer[k-1]);
-				if(!printFirst)
-				{
-					fprintf(stderr, "First k: %d Thread: %d\n", k, omp_get_thread_num());
-					assert(&layer[k - 1] == PreviousFirstCell);
-					printFirst = TRUE;
-				}
-
-				if(&layer[k + 1] == PreviousLastCell) 
-				{
-					fprintf(stderr, "At %d. Thread: %d\n", k, omp_get_thread_num());
-					assert(k + 1 == PreviousLastCellIndex);
-
-					layer[k] = (nextPreviousNeighbor + layer[k] + *PreviousLastCell)/3;
-					reached = TRUE;
-				}
-				else
-				{
-					layer[k] = (nextPreviousNeighbor + layer[k] + layer[k + 1])/3;//layer[k+1] doesn't work for last element of layer in thread
-				}	
-
-				nextPreviousNeighbor = layer[k];
-			}
-		}
-		
-		#else //BEFORE
-		energy_t *layer_copy = (energy_t *) malloc(sizeof(energy_t) * layer_size);
-
-		/* 4.2.1. Copy values to the ancillary array */
-		for (k = 0; k < layer_size; k++)
-			layer_copy[k] = layer[k];
-
-		/* 4.2.2. Update layer using the ancillary values.
-		 Skip updating the first and last positions */
-		for (k = 1; k < layer_size - 1; k++)
-			layer[k] = (layer_copy[k - 1] + layer_copy[k] + layer_copy[k + 1])
-					/ 3;
-
-		free(layer_copy);
 		#endif
 		
 		/* 4.3. Locate the maximum value in the layer, and its position */
-		for (k = 1; k < layer_size - 1; k++)
+		#pragma omp parallel num_threads(n_threads)
 		{
-			/* Check it only if it is a local maximum */
-			if (layer[k] > layer[k - 1] && layer[k] > layer[k + 1])
+			#pragma omp for
+			for (k = 1; k < layer_size - 1; k++)
 			{
-				if (layer[k] > maximum[i])
+				/* Check it only if it is a local maximum */
+				if (layer[k] > layer[k - 1] && layer[k] > layer[k + 1])
 				{
-					maximum[i] = layer[k];
-					positions[i] = k;
+					if (layer[k] > maximum[i])
+					{
+						maximum[i] = layer[k];
+						positions[i] = k;
+					}
 				}
 			}
 		}
+		
 	}
 	/* END: Do NOT optimize/parallelize the code below this point */
 
@@ -445,10 +433,10 @@ int main(int argc, char *argv[])
 	ttotal = cp_Wtime() - ttotal;
 
 	/* 6. DEBUG: Plot the result (only for layers up to 35 points) */
-#ifdef DEBUG
+	#ifdef DEBUG
 	if(!csv)
 	debug_print( layer_size, layer, positions, maximum, num_storms, storms);
-#endif
+	#endif
 
 	/* 7. Results output, used by the Tablon online judge software */
 	printf("\n");
@@ -469,6 +457,10 @@ int main(int argc, char *argv[])
 		free(storms[i].posval);
 	
 	free(layer);
+
+	#ifdef ENERGY_RELAXATION_BEFORE
+	free(layer_copy);
+	#endif
 
 	/* 9. Program ended successfully */
 	return 0;
