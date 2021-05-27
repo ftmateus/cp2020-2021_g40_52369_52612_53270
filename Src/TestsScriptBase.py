@@ -7,8 +7,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
-plt.style.use('default')
-
 DEFAULT_COLOR   = "\033[0m"
 RED             = "\033[0;31m"
 GREEN           = "\033[0;32m"
@@ -25,7 +23,7 @@ PLOTS_FOLDER = "plots/"
 ENERGY_STORMS_OMP_EXEC = "./energy_storms_omp"
 ENERGY_STORMS_SEQ_EXEC = "./energy_storms_seq"
 
-MAX_THREADS = 6
+MAX_THREADS = os.cpu_count()
 
 class ProgramResultsSample:
     def __init__(self, program, layer_size, n_threads, test_files, time, results):
@@ -234,25 +232,3 @@ def run_tests(layer_size, test_files, n_runs = 2, test_original_program = True):
             lastSample = newSample
             
     return SEQsamples, OMPsamples
-
-#################MAIN##################
-
-PLOT_FILE = "plot_init_arrays_speedup"
-
-all_test_files = get_test_files()
-
-layer_size = 55511973
-
-# samples = run_tests(layer_size, all_test_files, n_runs = 5)
-
-SEQsamples, OMPsamples = run_tests(layer_size, 
-["test_files/test_09_a16-17_p3_w1"], n_runs = 5)
-
-# SEQsamples, OMPsamples = run_tests(layer_size, 
-# all_test_files, n_runs = 5)
-
-plot_results_nthreads_time(PLOT_FILE, layer_size, SEQsamples, OMPsamples)
-
-print("\033[0;32mTest complete! Plot saved on file", PLOT_FILE)
-
-os.remove(CSV_FILENAME)

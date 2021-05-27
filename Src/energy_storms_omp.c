@@ -94,13 +94,12 @@ void update(energy_t *layer, int layer_size, int k, int pos, energy_t energy)
 	//printf("energy : %f\n", energy);
 	//printf("energy received: %f\n", energy_k);
 	/* 5. Do not add if its absolute value is lower than the threshold */
-	// if (energy_k >= THRESHOLD / layer_size
-	// 		|| energy_k <= -THRESHOLD / layer_size)
 
 	assert(energy_k >= THRESHOLD / layer_size || energy_k <= -THRESHOLD / layer_size);
-	
-	layer[k] = layer[k] + energy_k;
 
+	if (energy_k >= THRESHOLD / layer_size
+			|| energy_k <= -THRESHOLD / layer_size)
+		layer[k] = layer[k] + energy_k;
 }
 
 /* ANCILLARY FUNCTIONS: These are not called from the code section which is measured, leave untouched */
@@ -225,12 +224,6 @@ short processOptions(int argc, char *argv[])
 		{
 			n_threads = atoi(optarg);
 
-			if (n_threads <= 0)
-			{
-				fprintf(stderr, "Invalid number of threads! %d\n", n_threads);
-				exit(1);
-			}
-
 			//omp_set_num_threads(n_threads);
 			optargc++;
 			break;
@@ -242,40 +235,79 @@ short processOptions(int argc, char *argv[])
 }
 
 
+#ifndef ENERGY_RELAXATION_BEFORE
 void energy_relaxation(energy_t *layer, int layer_size)
 {
-	int PreviousFirstCellIndex 	= omp_get_thread_num() + ((layer_size - 1)/n_threads)*omp_get_thread_num();
-	int PreviousLastCellIndex 	= (omp_get_thread_num() + 1) + ((layer_size - 1)/n_threads)*(omp_get_thread_num() + 1);
+	int firstCellIndex 	= ((layer_size - 2)/omp_get_num_threads())*omp_get_thread_num() + 1;
 
-	energy_t *PreviousFirstCell = 	&layer[PreviousFirstCellIndex];
-	energy_t *PreviousLastCell  = 	&layer[PreviousLastCellIndex];
+	int endCellIndex 	= firstCellIndex + ((layer_size - 2)/omp_get_num_threads()) - 1;
 
-	energy_t nextPreviousNeighbor = *PreviousFirstCell;
-
-	#pragma omp for
-	for (int k = 1; k < layer_size - 1; k++)
+	if(omp_get_thread_num() == omp_get_num_threads() - 1)
 	{
-		energy_t oldCurrent = layer[k];
+		/**
+		 * The last thread will iterate the remainder additional 
+		 * points
+		 */
+		endCellIndex += (layer_size - 2)%omp_get_num_threads();
 
-		if(&layer[k + 1] == PreviousLastCell) 
-			layer[k] = (nextPreviousNeighbor + layer[k] + *PreviousLastCell)/3;
-		else
-			layer[k] = (nextPreviousNeighbor + layer[k] + layer[k + 1])/3;
-
-		nextPreviousNeighbor = oldCurrent;
+		assert(endCellIndex == layer_size - 2);
 	}
+
+	energy_t *cellBeforeFirstCell = 	&layer[firstCellIndex - 1];
+	energy_t *cellAfterEndCell    = 	&layer[endCellIndex + 1];
+
+	energy_t oldCellBeforeFirstCellValue  =  *cellAfterEndCell;
+
+	energy_t nextOldPreviousCellValue = *cellBeforeFirstCell;
+
+	#pragma omp barrier
+
+	#ifndef NDEBUG
+		boolean first = FALSE; 
+	#endif
+
+	int k = 0;
+	//"#pragma omp for" doesn t deal well with odd layer_size...
+	for (k = firstCellIndex; k <= endCellIndex; k++)
+	{
+		#ifndef NDEBUG
+			if(!first) 
+			{
+				assert(&layer[k - 1] == cellBeforeFirstCell);
+
+				first = TRUE;
+			}
+		#endif
+
+		energy_t oldCurrentCellValue = layer[k];
+
+		if(&layer[k + 1] == cellAfterEndCell) 
+			layer[k] = (nextOldPreviousCellValue + layer[k] + oldCellBeforeFirstCellValue)/3;
+		else
+			layer[k] = (nextOldPreviousCellValue + layer[k] + layer[k + 1])/3;
+
+		nextOldPreviousCellValue = oldCurrentCellValue;
+	}
+	
+	assert(k == endCellIndex + 1);
+	assert(&layer[k] == cellAfterEndCell);
 }
+#endif
 
 /*
  * MAIN PROGRAM
  */
 int main(int argc, char *argv[])
 {
-	int i, j, k;
-
-	n_threads = omp_get_num_threads();
+	n_threads = omp_get_max_threads();
 
 	short optargc = processOptions(argc, argv);
+
+	if (n_threads <= 0)
+	{
+		fprintf(stderr, "Invalid number of threads! %d\n", n_threads);
+		exit(1);
+	}
 
 	/* 1.1. Read arguments */
 	if (argc - optargc < 3)
@@ -291,13 +323,13 @@ int main(int argc, char *argv[])
 	Storm storms[num_storms];
 
 	/* 1.2. Read storms information */
-	for (i = 2 + optargc; i < argc; i++)
+	for (int i = 2 + optargc; i < argc; i++)
 		storms[i - (2 + optargc)] = read_storm_file(argv[i]);
 
 	/* 1.3. Intialize maximum levels to zero */
 	energy_t maximum[num_storms];
 	int positions[num_storms];
-	for (i = 0; i < num_storms; i++)
+	for (int i = 0; i < num_storms; i++)
 	{
 		maximum[i] = 0.0f;
 		positions[i] = 0;
@@ -322,8 +354,8 @@ int main(int argc, char *argv[])
 	}
 	double initial = cp_Wtime();
 
-	// #pragma omp parallel num_threads(n_threads)
-	// {	
+	#pragma omp parallel num_threads(n_threads)
+	{	
 		#pragma omp for simd
 		for (int kk = 0; kk < layer_size; kk++)
 		{
@@ -333,19 +365,18 @@ int main(int argc, char *argv[])
 			layer_copy[kk] = 0.00f;
 			#endif
 		}
-	//}
+	}
 	
 
 	double final = cp_Wtime();
 
 	/* 4. Storms simulation */
-	for (i = 0; i < num_storms; i++)
+	for (int i = 0; i < num_storms; i++)
 	{
 		/* 4.1. Add impacts energies to layer cells */
 		/* For each particle */
-		//O(p)
 		
-			for (j = 0; j < storms[i].size; j++)
+			for (int j = 0; j < storms[i].size; j++)
 			{
 				/* Get impact energy (expressed in thousandths) */
 				energy_t energy = (energy_t) storms[i].posval[j * 2 + 1] * 1000;
@@ -353,15 +384,9 @@ int main(int argc, char *argv[])
 				int position = storms[i].posval[j * 2];
 
 				/* For each cell in the layer */
-				//atenuation = energy/layer_size/THRESHOLD
-				//atenuation*atenuation = distanceMax
-				//if(pos+distanceMax>layer_size) max = layer_size-1 else max = pos+distanceMax
-				//if(pos-distanceMax<0) min = 0 else min = pos-distanceMax
+
 				float atenuation = energy / THRESHOLD;
 				unsigned long distanceMax = (unsigned long) atenuation * atenuation;
-
-				// if (distanceMax < 0)
-				// 	distanceMax = -distanceMax;
 
 				distanceMax--;
 
@@ -378,7 +403,7 @@ int main(int argc, char *argv[])
 						Skip updating the first and last positions */
 
 					#pragma omp for
-					for (k = min; k < max; k++)
+					for (int k = min; k < max; k++)
 					{
 						/* Update the energy value for the cell */
 						update(layer, layer_size, k, position, energy);
@@ -394,15 +419,15 @@ int main(int argc, char *argv[])
 			{
 				energy_relaxation(&layer[0], layer_size);
 			}
-		
+
 		#else //code below is before
 			/* 4.2.1. Copy values to the ancillary array */
-			for (k = 0; k < layer_size; k++)
+			for (int k = 0; k < layer_size; k++)
 				layer_copy[k] = layer[k];
 
 			/* 4.2.2. Update layer using the ancillary values.
 			Skip updating the first and last positions */
-			for (k = 1; k < layer_size - 1; k++)
+			for (int k = 1; k < layer_size - 1; k++)
 				layer[k] = (layer_copy[k - 1] + layer_copy[k] + layer_copy[k + 1])
 						/ 3;
 
@@ -412,7 +437,7 @@ int main(int argc, char *argv[])
 		#pragma omp parallel num_threads(n_threads)
 		{
 			#pragma omp for
-			for (k = 1; k < layer_size - 1; k++)
+			for (int k = 1; k < layer_size - 1; k++)
 			{
 				/* Check it only if it is a local maximum */
 				if (layer[k] > layer[k - 1] && layer[k] > layer[k + 1])
@@ -448,12 +473,12 @@ int main(int argc, char *argv[])
 	/* 7.2. Print the maximum levels */
 	printfColor(BLUE, "Results:\n")
 
-	for (i = 0; i < num_storms; i++)
+	for (int i = 0; i < num_storms; i++)
 		printf("%d%s%f\n", positions[i], separator, maximum[i]);
 	printf("\n");
 
 	/* 8. Free resources */
-	for (i = 0; i < argc - 2; i++)
+	for (int i = 0; i < argc - 2; i++)
 		free(storms[i].posval);
 	
 	free(layer);
