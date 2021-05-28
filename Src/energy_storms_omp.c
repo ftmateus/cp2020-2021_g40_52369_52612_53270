@@ -97,9 +97,7 @@ void update(energy_t *layer, int layer_size, int k, int pos, energy_t energy)
 
 	assert(energy_k >= THRESHOLD / layer_size || energy_k <= -THRESHOLD / layer_size);
 
-	if (energy_k >= THRESHOLD / layer_size
-			|| energy_k <= -THRESHOLD / layer_size)
-		layer[k] = layer[k] + energy_k;
+	layer[k] = layer[k] + energy_k;
 }
 
 /* ANCILLARY FUNCTIONS: These are not called from the code section which is measured, leave untouched */
@@ -262,8 +260,9 @@ void energy_relaxation(energy_t *layer, int layer_size)
 
 	#pragma omp barrier
 
-	#ifndef NDEBUG
+	#ifndef NDEBUG //assertions anciliary variables
 		boolean first = FALSE; 
+		boolean reached = FALSE;
 	#endif
 
 	int k = 0;
@@ -271,6 +270,7 @@ void energy_relaxation(energy_t *layer, int layer_size)
 	for (k = firstCellIndex; k <= endCellIndex; k++)
 	{
 		#ifndef NDEBUG
+			assert(!reached);
 			if(!first) 
 			{
 				assert(&layer[k - 1] == cellBeforeFirstCell);
@@ -282,7 +282,12 @@ void energy_relaxation(energy_t *layer, int layer_size)
 		energy_t oldCurrentCellValue = layer[k];
 
 		if(&layer[k + 1] == cellAfterEndCell) 
+		{
 			layer[k] = (nextOldPreviousCellValue + layer[k] + oldCellBeforeFirstCellValue)/3;
+			#ifndef NDEBUG 
+				reached = TRUE; 
+			#endif
+		}
 		else
 			layer[k] = (nextOldPreviousCellValue + layer[k] + layer[k + 1])/3;
 
@@ -354,7 +359,7 @@ int main(int argc, char *argv[])
 	}
 	double initial = cp_Wtime();
 
-	#pragma omp parallel num_threads(n_threads)
+	#pragma omp parallel num_threads(n_threads) if(n_threads > 1)
 	{	
 		#pragma omp for simd
 		for (int kk = 0; kk < layer_size; kk++)
@@ -397,7 +402,7 @@ int main(int argc, char *argv[])
 				assert(min <= layer_size);
 				assert(max >= 0);
 			
-				#pragma omp parallel num_threads(n_threads)
+				#pragma omp parallel num_threads(n_threads) if(n_threads > 1)
 				{
 					/* 4.2.2. Update layer using the ancillary values.
 						Skip updating the first and last positions */
@@ -415,7 +420,7 @@ int main(int argc, char *argv[])
 		/* 4.2. Energy relaxation between storms */
 		#ifndef ENERGY_RELAXATION_BEFORE //code below is after 
 
-			#pragma omp parallel num_threads(n_threads)
+			#pragma omp parallel num_threads(n_threads) if(n_threads > 1)
 			{
 				energy_relaxation(&layer[0], layer_size);
 			}
@@ -434,7 +439,7 @@ int main(int argc, char *argv[])
 		#endif
 		
 		/* 4.3. Locate the maximum value in the layer, and its position */
-		#pragma omp parallel num_threads(n_threads)
+		#pragma omp parallel num_threads(n_threads) if(n_threads > 1)
 		{
 			#pragma omp for
 			for (int k = 1; k < layer_size - 1; k++)

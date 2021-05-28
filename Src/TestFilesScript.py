@@ -8,9 +8,9 @@ PLOT_FILE = "mass_test"
 all_test_files = get_test_files()
 
 # layer_size = 111117
-layer_size = 100
+layer_size = 10000
 
-N_RUNS = 10
+N_RUNS = 50
 
 
 MAX_THREADS = os.cpu_count()

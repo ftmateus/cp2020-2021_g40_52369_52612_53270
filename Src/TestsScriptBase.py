@@ -4,6 +4,7 @@ import re
 import sys
 import csv
 import numpy as np
+import signal
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
@@ -232,3 +233,8 @@ def run_tests(layer_size, test_files, n_runs = 2, test_original_program = True):
             lastSample = newSample
             
     return SEQsamples, OMPsamples
+
+def signal_handler(sig, frame):
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)

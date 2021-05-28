@@ -29,6 +29,7 @@ LIBS=-lm
 
 # Targets to build
 EXES=energy_storms_seq energy_storms_omp
+EXES_NO_ASSERTIONS=energy_storms_seq_no_assert energy_storms_omp_no_assert
 
 # Rules. By default show help
 help:
@@ -50,11 +51,19 @@ help:
 
 all: $(EXES)
 
+all_no_assert: $(EXES_NO_ASSERTIONS)
+
 energy_storms_seq: energy_storms.c
-	$(CC) $(CFLAGS) $(DEBUG) -o $@ $< $(LIBS)
+	$(CC) $(CFLAGS) $(DEBUG) $(NOASSERT) -o $@ $< $(LIBS)
+
+energy_storms_seq_no_assert:
+	$(CC) $(CFLAGS) -DNDEBUG $(DEBUG) -o energy_storms_seq energy_storms.c $< $(LIBS)
 
 energy_storms_omp: energy_storms_omp.c
-	$(CC) $(CFLAGS) $(DEBUG) $(OMPFLAG) -o $@ $< $(LIBS)
+	$(CC) $(CFLAGS) $(DEBUG) $(NOASSERT) $(OMPFLAG) -o $@ $< $(LIBS)
+
+energy_storms_omp_no_assert:
+	$(CC) $(CFLAGS) -DNDEBUG $(DEBUG) $(OMPFLAG) -o energy_storms_omp energy_storms_omp.c $< $(LIBS)
 
 # Remove the target files
 clean:
@@ -66,6 +75,7 @@ debug_seq:
 
 debug_omp:
 	make energy_storms_omp DEBUG=-DDEBUG
+
 	
 # debug_omp_benchmark_layer_init:
 # 	make debug_omp BENCHMARK_LAYER_INIT=-DBENCHMARK_LAYER_INIT

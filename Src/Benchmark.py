@@ -3,11 +3,11 @@ from TestsScriptBase import *
 import os
 #################MAIN##################
 
-PLOT_FILE = "benchmark"
+PLOT_FILE = sys.argv[1]
 
 all_test_files = get_test_files()
 
-layer_size = 452137
+layer_size = 45213
 
 # samples = run_tests(layer_size, all_test_files, n_runs = 5)
 
