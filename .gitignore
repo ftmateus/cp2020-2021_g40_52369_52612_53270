@@ -169,3 +169,4 @@ $RECYCLE.BIN/
 Src/Sample*_out.txt
 
 Src/callgrind.out.*
+/Debug/

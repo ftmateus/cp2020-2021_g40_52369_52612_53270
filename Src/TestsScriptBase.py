@@ -148,8 +148,14 @@ def start_energy_storms_program(program, layer_size, test_files, n_threads = 1):
         assert False
 
     if proc.returncode != 0:
+
+        print("layer size " + str(layer_size))
+        print("tests ", test_files)
+        print(program == ENERGY_STORMS_OMP_EXEC)
         print(RED + "Error while executing program! Aborting script..." + DEFAULT_COLOR)
-        os.remove(CSV_FILENAME)
+        subprocess.run(["cat", CSV_FILENAME])
+                            
+        #os.remove(CSV_FILENAME)
         exit(1)
 
 
