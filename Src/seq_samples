@@ -1,0 +1,6 @@
+layer_size,10000000
+threshold,0.001
+program,./energy_storms_seq
+
+n_threads,mean_time
+1,4.2328415

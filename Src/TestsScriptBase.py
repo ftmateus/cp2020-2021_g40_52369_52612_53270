@@ -3,10 +3,9 @@ import os
 import re
 import sys
 import csv
-import numpy as np
 import signal
-import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
+
+from statistics import mean
 
 DEFAULT_COLOR   = "\033[0m"
 RED             = "\033[0;31m"
@@ -24,13 +23,13 @@ PLOTS_FOLDER = "plots/"
 ENERGY_STORMS_OMP_EXEC = "./energy_storms_omp"
 ENERGY_STORMS_SEQ_EXEC = "./energy_storms_seq"
 
-MAX_THREADS = os.cpu_count()
+#MAX_THREADS = os.cpu_count()
 
 class ProgramResultsSample:
     def __init__(self, program, layer_size, n_threads, test_files, time, results, threshold):
         self.program    = program
         self.time       = time
-        self.threshold  = time
+        self.threshold  = threshold
         self.layer_size = layer_size
         self.results    = results
         self.n_threads  = n_threads
@@ -67,27 +66,36 @@ class ProgramResultsSample:
         
         return True
 
-class OMPSamplesStats:
-    def __init__(self, samples):
+class SamplesStats:
+    def __init__(self, samples, program, layer_size, threshold, threads):
+        assert(len(threads) > 0)
+        assert(threads[0] == 1)
+        for i, t in enumerate(threads):
+            if(i > 0):
+                assert(threads[i] > threads[i - 1])
+        self.program = program
+        self.layer_size = layer_size
+        self.threshold = threshold
         self.samples = samples
-        self.meanTime = [0 for _ in range(MAX_THREADS)]
-        self.speedUp = [0 for _ in range(MAX_THREADS)]
-        self.efficiency = [0 for _ in range(MAX_THREADS)]
-        self.cost = [0 for _ in range(MAX_THREADS)]
+        self.threads = threads
+        self.meanTime = [0 for _ in range(len(threads))]
+        self.speedUp = [0 for _ in range(len(threads))]
+        self.efficiency = [0 for _ in range(len(threads))]
+        self.cost = [0 for _ in range(len(threads))]
         self._computeMeanTime()
         self._computeSpeedup()
         self._computeEfficiency()
         self._computeCost()
     
     def _computeMeanTime(self):
-        times = [[] for _ in range(MAX_THREADS)]
+        times = [[] for _ in range(len(threads))]
 
         for i, s in enumerate(self.samples):
-            times[s.n_threads - 1].append(s.time)
+            times[threads.index(s.n_threads)].append(s.time)
             
         for i, tl in enumerate(times):
             if tl != []:
-                self.meanTime[i] = np.mean(tl)
+                self.meanTime[i] = mean(tl)
     
     def _computeSpeedup(self):
         assert len(self.speedUp) == len(self.meanTime)
@@ -97,13 +105,25 @@ class OMPSamplesStats:
     def _computeEfficiency(self):
         assert len(self.efficiency) == len(self.meanTime)
         for p in range (1, len(self.meanTime)):
-            self.efficiency[p] = self.speedUp[p]/(p + 1)
+            self.efficiency[p] = self.speedUp[p]/(threads[p] + 1)
 
     def _computeCost(self):
         assert len(self.cost) == len(self.meanTime)
         for p in range (0, len(self.meanTime)):
-            self.cost[p] = (p + 1)*self.meanTime[p]
+            self.cost[p] = (threads[p] + 1)*self.meanTime[p]
 
+    def export_to_file(self, file_name):
+        with open(file_name, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+
+    @classmethod
+    def import_from_file(cls, file_name):
+        obj = cls.__new__(cls)  # Does not call __init__
+        super(SamplesStats, obj).__init__()  # Don't forget to call any polymorphic base class initializers
+        
+
+
+        return obj
 
 def get_test_files(regex_expr = "test_*"):
     test_files_folder = os.listdir("test_files/")
@@ -130,7 +150,7 @@ def start_energy_storms_program(program, layer_size, test_files, n_threads = 1, 
             csv_file.close()
 
         time = float(output_arr[0][1])
-        results = np.array(output_arr[2:])
+        results = output_arr[2:]
 
         results = ProgramResultsSample(program, layer_size, n_threads, test_files, time, results, threshold)
 
@@ -158,46 +178,10 @@ def start_energy_storms_program(program, layer_size, test_files, n_threads = 1, 
 
     return parse_results()
 
+def run_tests(layer_size, test_files, n_runs = 2, 
+    test_original_program = True, threshold=0.001,
+    threads=range(1, os.cpu_count() + 1)):
 
-#nthreads (x) and time (y)
-def plot_results_nthreads_time(plot_name, layer_size, threshold, SEQsamples = [], OMPsamples= []):
-    #plt.figure(figsize=(8,8), frameon=True)
-
-    figure, (timesPlt, otherstatsPlt) = plt.subplots(2, figsize=(10,8))
-
-    timesPlt.xaxis.set_major_locator(MaxNLocator(integer=True))
-
-    otherstatsPlt.xaxis.set_major_locator(MaxNLocator(integer=True))
-
-    stats = OMPSamplesStats(OMPsamples)
-
-    timesPlt.set_title("Layer size: " + str(layer_size) + " Threshold: " + str(threshold))
-
-    timesPlt.set_ylabel("Mean time (in seconds)")
-    
-    SEQsamplesMeanTime = np.mean(list(map(lambda x: x.time, SEQsamples)))
-
-    OMPxAxe = list(map(lambda x: " OMP-" + str(x),np.arange(1, MAX_THREADS + 1)))
-
-    timesPlt.bar(["SEQ"], [SEQsamplesMeanTime], color="red")
-
-    timesPlt.bar(OMPxAxe, stats.meanTime, color="blue")
-
-    otherstatsPlt.set_xlabel("Number of Threads")
-
-    otherstatsPlt.plot(OMPxAxe, stats.speedUp, color='r', label = "SpeedUp")
-
-    otherstatsPlt.plot(OMPxAxe, stats.efficiency, color='g', label = "Efficiency")
-
-    otherstatsPlt.plot(OMPxAxe, stats.cost, color='b', label = "Cost")
-    
-    otherstatsPlt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15),
-          ncol=3, fancybox=True, shadow=True)
-
-    plt.savefig(PLOTS_FOLDER + plot_name)
-    plt.close()
-
-def run_tests(layer_size, test_files, n_runs = 2, test_original_program = True, threshold=0.001):
     def _checkResults(newSample, lastSample):
         if(lastSample != None and not newSample.compareResults(lastSample)):
             print(RED + "Output mismatch! Differences:" + DEFAULT_COLOR)
@@ -226,7 +210,7 @@ def run_tests(layer_size, test_files, n_runs = 2, test_original_program = True, 
         
 
     print("Testing OMP program")
-    for t in range (1, MAX_THREADS + 1):
+    for t in threads:
         print(BLUE + str(t) + " thread(s)" + DEFAULT_COLOR)
         for r in range(n_runs):
             print( r + 1, "\r", end = '')
@@ -236,6 +220,23 @@ def run_tests(layer_size, test_files, n_runs = 2, test_original_program = True, 
             lastSample = newSample
             
     return SEQsamples, OMPsamples
+
+def export_samples_summary(samplesStats, csv_filename, layer_size, threshold, program, threads):
+    with open(csv_filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(["layer_size", str(layer_size)])
+        writer.writerow(["threshold", str(threshold)])
+        writer.writerow(["program", str(program)])
+        writer.writerow([])
+        writer.writerow(["n_threads", "mean_time", "speed_up"])
+        for t in threads:
+            byThread = list(filter(lambda s : s.n_threads == t, samples))
+            times = list(map(lambda s : s.time, byThread))
+            meanTime = mean(times)
+            writer.writerow([t, str(meanTime)])
+        
+        
+
 
 def signal_handler(sig, frame):
     sys.exit(0)
