@@ -30,7 +30,7 @@ double cp_Wtime(){
 }
 
 
-#define THRESHOLD    0.001f
+double threshold = 0.001f;
 
 /* Structure used to store data for one storm of particles */
 typedef struct {
@@ -58,7 +58,7 @@ void update( float *layer, int layer_size, int k, int pos, float energy ) {
     float energy_k = energy / layer_size / atenuacion;
 
     /* 5. Do not add if its absolute value is lower than the threshold */
-    if ( energy_k >= THRESHOLD / layer_size || energy_k <= -THRESHOLD / layer_size )
+    if ( energy_k >= threshold / layer_size || energy_k <= -threshold / layer_size )
         layer[k] = layer[k] + energy_k;
 }
 
@@ -141,11 +141,12 @@ short processOptions(int argc, char *argv[])
 {
 	short optargc = 0;
     char c;
-    while((c = getopt(argc, argv, "c:t:")) != -1)
+    while((c = getopt(argc, argv, "c:h:")) != -1)
     {
         switch(c)
         {
             case 'c': case 'C': 
+            {
 				csv = TRUE; 
 				if(optarg != NULL)
 				{
@@ -153,7 +154,16 @@ short processOptions(int argc, char *argv[])
 					optargc++;
 				}
 				break;
+            }
+            case 'h': case 'H':
+            {
+                threshold = atof(optarg);
+
+                optargc++;
+                break;
+            }
         }
+
 		optargc++;
     }
 	return optargc;
@@ -167,6 +177,12 @@ int main(int argc, char *argv[]) {
     int i,j,k;
 
     short optargc = processOptions(argc, argv);
+
+    if (threshold <= 0.0)
+	{
+		fprintf(stderr, "Invalid threshold! %f\n", threshold);
+		exit(1);
+	}
 
     /* 1.1. Read arguments */
     if (argc - optargc < 3)

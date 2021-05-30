@@ -54,16 +54,16 @@ all: $(EXES)
 all_no_assert: $(EXES_NO_ASSERTIONS)
 
 energy_storms_seq: energy_storms.c
-	$(CC) $(CFLAGS) $(DEBUG) $(NOASSERT) -o $@ $< $(LIBS)
+	$(CC) $(CFLAGS) -g $(DEBUG) $(NOASSERT) -o $@ $< $(LIBS)
 
 energy_storms_seq_no_assert:
-	$(CC) $(CFLAGS) -DNDEBUG $(DEBUG) -o energy_storms_seq energy_storms.c $< $(LIBS)
+	$(CC) $(CFLAGS) -g -DNDEBUG $(DEBUG) -o energy_storms_seq energy_storms.c $< $(LIBS)
 
 energy_storms_omp: energy_storms_omp.c
-	$(CC) $(CFLAGS) $(DEBUG) $(NOASSERT) $(OMPFLAG) -o $@ $< $(LIBS)
+	$(CC) $(CFLAGS) -g $(DEBUG) $(NOASSERT) $(OMPFLAG) -o $@ $< $(LIBS)
 
 energy_storms_omp_no_assert:
-	$(CC) $(CFLAGS) -DNDEBUG $(DEBUG) $(OMPFLAG) -o energy_storms_omp energy_storms_omp.c $< $(LIBS)
+	$(CC) $(CFLAGS) -g -DNDEBUG $(DEBUG) $(OMPFLAG) -o energy_storms_omp energy_storms_omp.c $< $(LIBS)
 
 # Remove the target files
 clean:

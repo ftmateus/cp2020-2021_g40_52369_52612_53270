@@ -60,7 +60,7 @@ double cp_Wtime()
 
 typedef float energy_t;
 
-#define THRESHOLD    0.001f
+double threshold = 0.001f;
 
 #undef ENERGY_RELAXATION_BEFORE
 
@@ -95,8 +95,7 @@ void update(energy_t *layer, int layer_size, int k, int pos, energy_t energy)
 	//printf("energy received: %f\n", energy_k);
 	/* 5. Do not add if its absolute value is lower than the threshold */
 
-	assert(
-			energy_k >= THRESHOLD / layer_size || energy_k <= -THRESHOLD / layer_size);
+	assert(energy_k >= threshold / layer_size || energy_k <= -threshold / layer_size);
 
 	layer[k] = layer[k] + energy_k;
 }
@@ -112,6 +111,7 @@ void debug_print(int layer_size, energy_t *layer, int *positions,
 	int k_justify = (int) log10(layer_size) + 1;
 
 	/* Only print for array size up to 35 (change it for bigger sizes if needed) */
+
 	if (layer_size <= 35)
 	{
 		/* Traverse layer */
@@ -205,28 +205,34 @@ short processOptions(int argc, char *argv[])
 {
 	short optargc = 0;
 	char c;
-	while ((c = getopt(argc, argv, "c:t:")) != -1)
+	while ((c = getopt(argc, argv, "c:t:h:")) != -1)
 	{
 		switch (c)
 		{
-		case 'c':
-		case 'C':
-			csv = TRUE;
-			if (optarg != NULL)
+			case 'c': case 'C':
+				csv = TRUE;
+				if (optarg != NULL)
+				{
+					FILE *f = freopen(optarg, "w", stdout);
+					assert(f != NULL);
+					optargc++;
+				}
+				break;
+			case 't': case 'T':
 			{
-				freopen(optarg, "w", stdout);
-				optargc++;
-			}
-			break;
-		case 't':
-		case 'T':
-		{
-			n_threads = atoi(optarg);
+				n_threads = atoi(optarg);
 
-			//omp_set_num_threads(n_threads);
-			optargc++;
-			break;
-		}
+				//omp_set_num_threads(n_threads);
+				optargc++;
+				break;
+			}
+			case 'h': case 'H':
+			{
+				threshold = atof(optarg);
+
+				optargc++;
+				break;
+			}
 		}
 		optargc++;
 	}
@@ -260,18 +266,18 @@ void energy_relaxation(energy_t *layer, int layer_size)
 
 	energy_t nextOldPreviousCellValue = *cellBeforeFirstCell;
 
-#pragma omp barrier
+	#pragma omp barrier
 
-#ifndef NDEBUG //assertions anciliary variables
-	boolean first = FALSE;
-	boolean reached = FALSE;
-#endif
+	#ifndef NDEBUG //assertions anciliary variables
+		boolean first = FALSE;
+		boolean reached = FALSE;
+	#endif
 
 	int k = 0;
 	//"#pragma omp for" doesn t deal well with odd layer_size...
 	for (k = firstCellIndex; k <= endCellIndex; k++)
 	{
-#ifndef NDEBUG
+		#ifndef NDEBUG
 		assert(!reached);
 		if (!first)
 		{
@@ -279,7 +285,7 @@ void energy_relaxation(energy_t *layer, int layer_size)
 
 			first = TRUE;
 		}
-#endif
+		#endif
 
 		energy_t oldCurrentCellValue = layer[k];
 
@@ -287,9 +293,9 @@ void energy_relaxation(energy_t *layer, int layer_size)
 		{
 			layer[k] = (nextOldPreviousCellValue + layer[k]
 					+ oldCellBeforeFirstCellValue) / 3;
-#ifndef NDEBUG
+			#ifndef NDEBUG
 			reached = TRUE;
-#endif
+			#endif
 		}
 		else
 			layer[k] = (nextOldPreviousCellValue + layer[k] + layer[k + 1]) / 3;
@@ -314,6 +320,12 @@ int main(int argc, char *argv[])
 	if (n_threads <= 0)
 	{
 		fprintf(stderr, "Invalid number of threads! %d\n", n_threads);
+		exit(1);
+	}
+
+	if (threshold <= 0.0)
+	{
+		fprintf(stderr, "Invalid threshold! %f\n", threshold);
 		exit(1);
 	}
 
@@ -351,7 +363,7 @@ int main(int argc, char *argv[])
 	/* 3. Allocate memory for the layer and initialize to zero */
 	energy_t *layer = (energy_t *) malloc(sizeof(energy_t) * layer_size);
 
-#ifdef ENERGY_RELAXATION_BEFORE
+	#ifdef ENERGY_RELAXATION_BEFORE
 	energy_t *layer_copy = (energy_t *) malloc(sizeof(energy_t) * layer_size);
 	#endif
 
@@ -362,14 +374,14 @@ int main(int argc, char *argv[])
 	}
 	double initial = cp_Wtime();
 
-#pragma omp parallel num_threads(n_threads) if(n_threads > 1)
+	#pragma omp parallel num_threads(n_threads) if(n_threads > 1)
 	{
-#pragma omp for simd
+		#pragma omp for simd
 		for (int kk = 0; kk < layer_size; kk++)
 		{
 			layer[kk] = 0.0f;
 
-#ifdef ENERGY_RELAXATION_BEFORE
+			#ifdef ENERGY_RELAXATION_BEFORE
 			layer_copy[kk] = 0.00f;
 			#endif
 		}
@@ -380,73 +392,77 @@ int main(int argc, char *argv[])
 	/* 4. Storms simulation */
 	for (int i = 0; i < num_storms; i++)
 	{
-		/* 4.1. Add impacts energies to layer cells */
-		/* For each particle */
-
-		for (int j = 0; j < storms[i].size; j++)
+		int maxL = 0, minL = layer_size;
+		int maxP = 0, minP = layer_size;
+		int position = 0;
+		energy_t energy;
+		#pragma omp parallel num_threads(n_threads)
 		{
-			/* Get impact energy (expressed in thousandths) */
-			energy_t energy = (energy_t) storms[i].posval[j * 2 + 1] * 1000;
-			/* Get impact position */
-			int position = storms[i].posval[j * 2];
-
-			/* For each cell in the layer */
-
-			float atenuation = energy / THRESHOLD;
-			unsigned long distanceMax = (unsigned long) atenuation * atenuation;
-
-			distanceMax--;
-
-			//to avoid overflows/underflows
-			int max =
-					distanceMax >= layer_size ?
-							layer_size : position + distanceMax;
-			int min = distanceMax >= position ? 0 : position - distanceMax;
-
-			assert(min <= layer_size);
-			assert(max >= 0);
-
-#pragma omp parallel num_threads(n_threads) if(n_threads > 1)
+			/* 4.1. Add impacts energies to layer cells */
+			/* For each particle */
+			for (int j = 0; j < storms[i].size; j++)
 			{
-				/* 4.2.2. Update layer using the ancillary values.
-				 Skip updating the first and last positions */
+				
+				#pragma omp single
+				{
+					/* Get impact energy (expressed in thousandths) */
+					energy = (energy_t) storms[i].posval[j * 2 + 1] * 1000;
+					/* Get impact position */
+					position = storms[i].posval[j * 2];
 
-#pragma omp for
-				for (int k = min; k < max; k++)
+					float atenuation = energy / threshold;
+					unsigned long distanceMax = (unsigned long) atenuation * atenuation;
+				
+					distanceMax--;
+
+					//to avoid overflows/underflows
+					maxP = distanceMax >= layer_size ? layer_size : position + distanceMax;
+					minP = distanceMax >= position ? 0 : position - distanceMax;
+				
+					maxL = maxP > maxL ? maxP : maxL;
+					minL = minP < minL ? minP : minL;
+
+					assert(maxL >= maxP && minL <= minP);
+					assert(maxL >= minL);
+					assert(minL <= layer_size && minL >= 0);
+					assert(maxL <= layer_size && maxL >= 0);
+
+				}
+				
+				/* For each cell in the layer */
+				/* 4.2.2. Update layer using the ancillary values.
+				Skip updating the first and last positions */
+
+				#pragma omp for
+				for (int k = minP; k < maxP; k++)
 				{
 					/* Update the energy value for the cell */
 					update(layer, layer_size, k, position, energy);
 				}
 			}
-		}
 
-		/* 4.2. Energy relaxation between storms */
-#ifndef ENERGY_RELAXATION_BEFORE //code below is after
+				/* 4.2. Energy relaxation between storms */
+			#ifndef ENERGY_RELAXATION_BEFORE //code below is after
 
-#pragma omp parallel num_threads(n_threads) if(n_threads > 1)
-		{
-			energy_relaxation(&layer[0], layer_size);
-		}
+				energy_relaxation(&layer[minL], maxL - minL);
 
-#else //code below is before
-			/* 4.2.1. Copy values to the ancillary array */
-			for (int k = 0; k < layer_size; k++)
-				layer_copy[k] = layer[k];
+			#else //code below is before
+				/* 4.2.1. Copy values to the ancillary array */
+				for (int k = 0; k < layer_size; k++)
+					layer_copy[k] = layer[k];
 
-			/* 4.2.2. Update layer using the ancillary values.
-			Skip updating the first and last positions */
-			for (int k = 1; k < layer_size - 1; k++)
-				layer[k] = (layer_copy[k - 1] + layer_copy[k] + layer_copy[k + 1])
-						/ 3;
+				/* 4.2.2. Update layer using the ancillary values.
+				Skip updating the first and last positions */
+				for (int k = 1; k < layer_size - 1; k++)
+					layer[k] = (layer_copy[k - 1] + layer_copy[k] + layer_copy[k + 1])
+							/ 3;
 
-		#endif
+			#endif
 
-		/* 4.3. Locate the maximum value in the layer, and its position */
-		#pragma omp parallel num_threads(n_threads) if(n_threads > 1)
-		{
-			int maxk = 1;
+			/* 4.3. Locate the maximum value in the layer, and its position */
+			int maxk = minL + 1;
 			#pragma omp for nowait
-			for (int k = 1; k < layer_size - 1; k++)
+			for (int k = minL + 1; k < maxL - 1; k++)
 			{
 				/* Check it only if it is a local maximum */
 				if (layer[k] > layer[k - 1] && layer[k] > layer[k + 1])
@@ -457,6 +473,7 @@ int main(int argc, char *argv[])
 					}
 				}
 			}
+
 			#pragma omp critical
 			{
 				if (layer[maxk] > maximum[i])
@@ -465,8 +482,12 @@ int main(int argc, char *argv[])
 					positions[i] = maxk;
 				}
 			}
-		}
 
+			#pragma omp single
+			{
+				free(storms[i].posval);
+			}
+		}
 	}
 	/* END: Do NOT optimize/parallelize the code below this point */
 
@@ -474,11 +495,11 @@ int main(int argc, char *argv[])
 	ttotal = cp_Wtime() - ttotal;
 
 	/* 6. DEBUG: Plot the result (only for layers up to 35 points) */
-#ifdef DEBUG
+	#ifdef DEBUG
 	if(!csv)
-	debug_print( layer_size, layer, positions, maximum, num_storms, storms);
+		debug_print( layer_size, layer, positions, maximum, num_storms, storms);
 	#endif
-
+	
 	/* 7. Results output, used by the Tablon online judge software */
 	printf("\n");
 
@@ -493,15 +514,13 @@ int main(int argc, char *argv[])
 		printf("%d%s%f\n", positions[i], separator, maximum[i]);
 	printf("\n");
 
-	/* 8. Free resources */
-	for (int i = 0; i < argc - 2; i++)
-		free(storms[i].posval);
-
 	free(layer);
 
-#ifdef ENERGY_RELAXATION_BEFORE
+	#ifdef ENERGY_RELAXATION_BEFORE
 	free(layer_copy);
 	#endif
+
+	fclose(stdout);
 
 	/* 9. Program ended successfully */
 	return 0;
