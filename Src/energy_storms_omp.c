@@ -62,6 +62,10 @@ typedef float energy_t;
 
 double threshold = 0.001f;
 
+/**
+ * define this symbol to check if a bug is caused by the new implementation
+ * of the energy relaxation
+ */
 #undef ENERGY_RELAXATION_BEFORE
 
 /* Structure used to store data for one storm of particles */
@@ -90,9 +94,7 @@ void update(energy_t *layer, int layer_size, int k, int pos, energy_t energy)
 	float atenuacion = sqrtf((float) distance);
 	/* 4. Compute attenuated energy */
 	energy_t energy_k = energy / layer_size / atenuacion;
-	//printf("cell : %d\n", k);
-	//printf("energy : %f\n", energy);
-	//printf("energy received: %f\n", energy_k);
+	
 	/* 5. Do not add if its absolute value is lower than the threshold */
 
 	assert(energy_k >= threshold / layer_size || energy_k <= -threshold / layer_size);
@@ -396,7 +398,7 @@ int main(int argc, char *argv[])
 		int maxP = 0, minP = layer_size;
 		int position = 0;
 		energy_t energy;
-		#pragma omp parallel num_threads(n_threads)
+		#pragma omp parallel num_threads(n_threads) if(n_threads > 1)
 		{
 			/* 4.1. Add impacts energies to layer cells */
 			/* For each particle */
@@ -415,15 +417,15 @@ int main(int argc, char *argv[])
 				
 					distanceMax--;
 
-					//to avoid overflows/underflows
+					//to avoid overflows
 					maxP = distanceMax >= layer_size ? layer_size : position + distanceMax;
 					minP = distanceMax >= position ? 0 : position - distanceMax;
 				
 					maxL = maxP > maxL ? maxP : maxL;
 					minL = minP < minL ? minP : minL;
 
-					assert(maxL >= maxP && minL <= minP);
 					assert(maxL >= minL);
+					assert(maxL >= maxP && minL <= minP);
 					assert(minL <= layer_size && minL >= 0);
 					assert(maxL <= layer_size && maxL >= 0);
 

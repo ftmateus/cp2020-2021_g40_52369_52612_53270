@@ -1,31 +1,48 @@
 from TestsScriptBase import *
-
 import os
+import getopt
 #################MAIN##################
 
-PLOT_FILE = sys.argv[1]
+opargs, args = getopt.getopt(sys.argv[1:], "h:l:")
 
-all_test_files = get_test_files()
+layer_size = 1000000
+threshold = 0.001
+threads = [1, 2, 4, 8, 16, 32, 64]
 
-layer_size = 10000000
+tests = get_test_files("test_01_*")
 
-threshold= 0.001
+for opt in opargs:
+    if(opt[0] == "-l"):
+        layer_size = int(opt[1])
+    elif(opt[0] == "-h"):
+        threshold = float(opt[1])
+
+if(len(args) > 0):
+    tests = args
+
+if(layer_size <= 0):
+    print("Specify valid layer size! (ex: -l 1000)")
+    exit(1)
+
+if(threshold <= 0.0):
+    print("Specify valid threshold!")
+    exit(1)
+
+#all_test_files = get_test_files()
 
 # samples = run_tests(layer_size, all_test_files, n_runs = 5)
 
 # SEQsamples, OMPsamples = run_tests(layer_size, 
 # ["test_files/test_09_a16-17_p3_w1", "test_files/test_07_a1M_p5k_w4"], n_runs = 5)
 
-SEQsamples, OMPsamples = run_tests(layer_size, 
-get_test_files("test_01_*"), n_runs = 2, threshold=threshold)
+SEQSamples, OMPSamples = run_tests(layer_size, 
+tests, n_runs = 5, threshold=threshold, threads=threads)
 
 # SEQsamples, OMPsamples = run_tests(layer_size, 
 # all_test_files, n_runs = 5)
 
-export_samples_summary(SEQsamples, "seq_samples", layer_size, 
-    threshold, ENERGY_STORMS_SEQ_EXEC, [1])
-#plot_results_nthreads_time(PLOT_FILE, layer_size, threshold, SEQsamples, OMPsamples)
+export_results_stats(SEQSamples, OMPSamples, layer_size, threshold, threads)
 
-print("\033[0;32mTest complete! Plot saved on file", PLOT_FILE)
+print(GREEN + "Test complete!")
 
 os.remove(CSV_FILENAME)

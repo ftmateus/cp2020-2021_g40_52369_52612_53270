@@ -23,6 +23,9 @@ PLOTS_FOLDER = "plots/"
 ENERGY_STORMS_OMP_EXEC = "./energy_storms_omp"
 ENERGY_STORMS_SEQ_EXEC = "./energy_storms_seq"
 
+SEQ_STATS_OUT_FILE = "seq.csv"
+OMP_STATS_OUT_FILE = "omp.csv"
+
 #MAX_THREADS = os.cpu_count()
 
 class ProgramResultsSample:
@@ -76,22 +79,21 @@ class SamplesStats:
         self.program = program
         self.layer_size = layer_size
         self.threshold = threshold
-        self.samples = samples
         self.threads = threads
         self.meanTime = [0 for _ in range(len(threads))]
         self.speedUp = [0 for _ in range(len(threads))]
         self.efficiency = [0 for _ in range(len(threads))]
         self.cost = [0 for _ in range(len(threads))]
-        self._computeMeanTime()
+        self._computeMeanTime(samples)
         self._computeSpeedup()
         self._computeEfficiency()
         self._computeCost()
     
-    def _computeMeanTime(self):
-        times = [[] for _ in range(len(threads))]
+    def _computeMeanTime(self, samples):
+        times = [[] for _ in range(len(self.threads))]
 
-        for i, s in enumerate(self.samples):
-            times[threads.index(s.n_threads)].append(s.time)
+        for i, s in enumerate(samples):
+            times[self.threads.index(s.n_threads)].append(s.time)
             
         for i, tl in enumerate(times):
             if tl != []:
@@ -105,23 +107,59 @@ class SamplesStats:
     def _computeEfficiency(self):
         assert len(self.efficiency) == len(self.meanTime)
         for p in range (1, len(self.meanTime)):
-            self.efficiency[p] = self.speedUp[p]/(threads[p] + 1)
+            self.efficiency[p] = self.speedUp[p]/(self.threads[p] + 1)
 
     def _computeCost(self):
         assert len(self.cost) == len(self.meanTime)
         for p in range (0, len(self.meanTime)):
-            self.cost[p] = (threads[p] + 1)*self.meanTime[p]
+            self.cost[p] = (self.threads[p] + 1)*self.meanTime[p]
 
-    def export_to_file(self, file_name):
+    def export_to_csv_file(self, file_name):
         with open(file_name, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+            writer.writerow(["program", str(self.program)])
+            writer.writerow(["layer_size", str(self.layer_size)])
+            writer.writerow(["threshold", str(self.threshold)])
+            writer.writerow([])
+            writer.writerow(["n_threads", "mean_time", "speed_up", "efficiency", "cost"])
+            for i, t in enumerate(self.threads):
+                writer.writerow([str(t), str(self.meanTime[i]), str(self.speedUp[i]), 
+                    str(self.efficiency[i]), str(self.cost[i])])
+
 
     @classmethod
-    def import_from_file(cls, file_name):
+    def import_from_csv_file(cls, file_name):
         obj = cls.__new__(cls)  # Does not call __init__
         super(SamplesStats, obj).__init__()  # Don't forget to call any polymorphic base class initializers
         
+        with open(file_name, "r") as csv_file:
+            reader = csv.reader(csv_file, delimiter=',')
+            readerArr = []
+            for row in reader:
+                if(row != []):
+                    readerArr.append(row)
 
+            csv_file.close()
+            obj.program = readerArr[0][1]
+            obj.layer_size = readerArr[1][1]
+            obj.threshold = readerArr[2][1]
+            obj.threads = []
+            obj.meanTime = []
+            obj.speedUp = []
+            obj.efficiency = []
+            obj.cost = []
+
+            for i in range (4, len(readerArr)):
+                threads = int(readerArr[i][0])
+                obj.threads.append(threads)
+                meanTime = float(readerArr[i][1])
+                obj.meanTime.append(meanTime)
+                speedUp = float(readerArr[i][2])
+                obj.speedUp.append(speedUp)
+                efficiency = float(readerArr[i][3])
+                obj.efficiency.append(efficiency)
+                cost = float(readerArr[i][4])
+                obj.cost.append(cost)
 
         return obj
 
@@ -221,22 +259,14 @@ def run_tests(layer_size, test_files, n_runs = 2,
             
     return SEQsamples, OMPsamples
 
-def export_samples_summary(samplesStats, csv_filename, layer_size, threshold, program, threads):
-    with open(csv_filename, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile, delimiter=',', quoting=csv.QUOTE_MINIMAL)
-        writer.writerow(["layer_size", str(layer_size)])
-        writer.writerow(["threshold", str(threshold)])
-        writer.writerow(["program", str(program)])
-        writer.writerow([])
-        writer.writerow(["n_threads", "mean_time", "speed_up"])
-        for t in threads:
-            byThread = list(filter(lambda s : s.n_threads == t, samples))
-            times = list(map(lambda s : s.time, byThread))
-            meanTime = mean(times)
-            writer.writerow([t, str(meanTime)])
-        
-        
+def export_results_stats(SEQSamples, OMPSamples, layer_size, threshold, threads):
+    SEQStats = SamplesStats(SEQSamples, ENERGY_STORMS_SEQ_EXEC, layer_size, threshold, [1])
 
+    OMPStats = SamplesStats(OMPSamples, ENERGY_STORMS_OMP_EXEC, layer_size, threshold, threads)
+
+    SEQStats.export_to_csv_file(SEQ_STATS_OUT_FILE)
+    OMPStats.export_to_csv_file(OMP_STATS_OUT_FILE)
+        
 
 def signal_handler(sig, frame):
     sys.exit(0)

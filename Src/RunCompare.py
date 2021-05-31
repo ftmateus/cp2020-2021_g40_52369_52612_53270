@@ -29,9 +29,11 @@ if(threshold <= 0.0):
 
 test_files = args
 
+print("Running original program")
 seqSample = start_energy_storms_program(ENERGY_STORMS_SEQ_EXEC,
                 layer_size, test_files, threshold=threshold)
 
+print("Running OMP program")
 ompSample = start_energy_storms_program(ENERGY_STORMS_OMP_EXEC,
                 layer_size, test_files, n_threads, threshold=threshold)
 

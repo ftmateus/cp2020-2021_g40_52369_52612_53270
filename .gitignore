@@ -169,4 +169,9 @@ $RECYCLE.BIN/
 Src/Sample*_out.txt
 
 Src/callgrind.out.*
-/Debug/
+Debug/
+
+Src/*.csv
+Src/energy_storms_omp
+Src/energy_storms_seq
+Src/__pycache__/
