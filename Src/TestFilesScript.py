@@ -23,8 +23,8 @@ MAX_THREADS = os.cpu_count()
 #    run_tests(layer_size, [test], n_runs = N_RUNS)#
 #
 
-print("Using all test_01_* files")
-run_tests(layer_size, get_test_files("test_01_*"), n_runs = N_RUNS)
+#print("Using all test_01_* files")
+#run_tests(layer_size, get_test_files("test_01_*"), n_runs = N_RUNS)
 #
 #print("Using all test_02_* files")
 #run_tests(layer_size, get_test_files("test_02_*"), n_runs = N_RUNS)

@@ -47,4 +47,4 @@ else:
     ompSample.printAll("Sample2_out.txt")
     subprocess.run(["diff", "Sample1_out.txt", "Sample2_out.txt"])
 
-os.remove(CSV_FILENAME)
+#os.remove(CSV_FILENAME)

@@ -476,8 +476,13 @@ int main(int argc, char *argv[])
 						maxk = k;
 					}
 				}
+				
 			}
-
+			if (layer[maxL] > layer[maxk])
+			{
+				maxk = maxL;
+			}
+			fprintf(stderr, "%d, %d, ...");
 			#pragma omp critical
 			{
 				if (layer[maxk] > maximum[i])
