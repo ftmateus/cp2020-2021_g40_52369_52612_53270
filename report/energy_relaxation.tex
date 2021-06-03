@@ -1,0 +1,6 @@
+In this phase the material reacts by slightly distributing its charge. Each control point is updated with the average value of three points: the previous one, the point itself, and the next one. To avoid destroying the original values in the array while they are still needed to update other neighbors, the array values are first copied to a second ancillary array before the relaxation. The old values are read from the ancillary array, while the new values are written to the original array.
+\subsubsection{Sequential version analysis}
+It was evident that creating the ancillary array (\verb|layer_copy|) to preserve the old values of the original one (\verb|layer|) creates a lot of overhead each time a storm file is processed, so it was natural to think about removing this array, not only to improve memory consumption, but also speedup. However, doing so implies resolving some complex loop-carried dependencies, besides preserving the old values in some other way, like using ancillary variables.
+\par There is both a true dependency and an anti-dependency
+
+\subsubsection{Parallel version implementation}
