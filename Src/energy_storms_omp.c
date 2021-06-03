@@ -450,11 +450,13 @@ int main(int argc, char *argv[])
 
 			#else //code below is before
 				/* 4.2.1. Copy values to the ancillary array */
+				#pragma omp for
 				for (int k = 0; k < layer_size; k++)
 					layer_copy[k] = layer[k];
 
 				/* 4.2.2. Update layer using the ancillary values.
 				Skip updating the first and last positions */
+				#pragma omp for
 				for (int k = 1; k < layer_size - 1; k++)
 					layer[k] = (layer_copy[k - 1] + layer_copy[k] + layer_copy[k + 1])
 							/ 3;
