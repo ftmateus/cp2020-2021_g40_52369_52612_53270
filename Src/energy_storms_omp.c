@@ -464,7 +464,7 @@ int main(int argc, char *argv[])
 			#endif
 
 			/* 4.3. Locate the maximum value in the layer, and its position */
-			int maxk = minL + 1;
+			int maxk = minL;
 			#pragma omp for nowait
 			for (int k = minL + 1; k < maxL - 1; k++)
 			{
@@ -478,21 +478,30 @@ int main(int argc, char *argv[])
 				}
 				
 			}
-			if (layer[maxL] > layer[maxk])
-			{
-				maxk = maxL;
-			}
-			fprintf(stderr, "%d, %d, ...");
+
+
 			#pragma omp critical
 			{
-				if (layer[maxk] > maximum[i])
+				if (maxk != minL)
 				{
-					maximum[i] = layer[maxk];
-					positions[i] = maxk;
-				}
+					if (layer[maxk] > maximum[i])
+					{
+						maximum[i] = layer[maxk];
+						positions[i] = maxk;
+					}
+				}/*else{
+					maxk = layer[maxL] > layer[minL] ? maxL : minL;
+					
+					if (layer[maxk] > maximum[i])
+					{
+						maximum[i] = layer[maxk];
+						positions[i] = maxk;
+					}
+				}*/
 			}
+			fprintf(stderr, "%d\n", maximum[i]);
 
-			#pragma omp single
+#pragma omp single
 			{
 				free(storms[i].posval);
 			}
