@@ -482,7 +482,7 @@ int main(int argc, char *argv[])
 						maximum[i] = layer[maxk];
 						positions[i] = maxk;
 					}
-				}/*else{
+				}else{
 					maxk = layer[maxL] > layer[minL] ? maxL : minL;
 					
 					if (layer[maxk] > maximum[i])
@@ -490,7 +490,7 @@ int main(int argc, char *argv[])
 						maximum[i] = layer[maxk];
 						positions[i] = maxk;
 					}
-				}*/
+				}
 			}
 
 			#pragma omp single
