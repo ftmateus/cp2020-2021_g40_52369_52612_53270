@@ -1,7 +1,7 @@
 from TestsScriptBase import *
 import getopt
 
-opargs, args = getopt.getopt(sys.argv[1:], "t:l:")
+opargs, args = getopt.getopt(sys.argv[1:], "t:l:h:")
 
 n_threads = 1
 layer_size = 0

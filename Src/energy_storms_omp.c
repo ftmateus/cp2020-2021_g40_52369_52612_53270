@@ -31,10 +31,13 @@
 #define CYAN            "\033[0;36m"
 #define WHITE           "\033[0;37m"
 
+#define MIN_PARALLEL_THRESHOLD 1000
+
 typedef enum
 {
 	FALSE, TRUE
 } boolean;
+
 
 #define printfColor(color, format, ...) \
     {\
@@ -97,7 +100,9 @@ void update(energy_t *layer, int layer_size, int k, int pos, energy_t energy)
 	
 	/* 5. Do not add if its absolute value is lower than the threshold */
 
+	
 	assert(energy_k >= threshold / layer_size || energy_k <= -threshold / layer_size);
+
 
 	layer[k] = layer[k] + energy_k;
 }
@@ -244,11 +249,10 @@ short processOptions(int argc, char *argv[])
 #ifndef ENERGY_RELAXATION_BEFORE
 void energy_relaxation(energy_t *layer, int layer_size)
 {
-	int firstCellIndex = ((layer_size - 2) / omp_get_num_threads())
-			* omp_get_thread_num() + 1;
+	int offset = (layer_size - 2) / omp_get_num_threads();
 
-	int endCellIndex = firstCellIndex
-			+ ((layer_size - 2) / omp_get_num_threads()) - 1;
+	int firstCellIndex = offset*omp_get_thread_num() + 1;
+	int endCellIndex = firstCellIndex + offset - 1;
 
 	if (omp_get_thread_num() == omp_get_num_threads() - 1)
 	{
@@ -256,7 +260,9 @@ void energy_relaxation(energy_t *layer, int layer_size)
 		 * The last thread will iterate the remainder additional 
 		 * points
 		 */
-		endCellIndex += (layer_size - 2) % omp_get_num_threads();
+		assert(endCellIndex <= layer_size - 2);
+
+		endCellIndex += (layer_size - 2) - endCellIndex;
 
 		assert(endCellIndex == layer_size - 2);
 	}
@@ -264,41 +270,23 @@ void energy_relaxation(energy_t *layer, int layer_size)
 	energy_t *cellBeforeFirstCell = &layer[firstCellIndex - 1];
 	energy_t *cellAfterEndCell = &layer[endCellIndex + 1];
 
-	energy_t oldCellBeforeFirstCellValue = *cellAfterEndCell;
-
+	energy_t oldCellAfterEndCellValue = *cellAfterEndCell;
 	energy_t nextOldPreviousCellValue = *cellBeforeFirstCell;
-
+	
+	/**
+	 *	The threads should wait for each other in order to get 
+	 *  the old values of the layer array before those values are
+	 *  destroyed.
+	 */
 	#pragma omp barrier
 
-	#ifndef NDEBUG //assertions anciliary variables
-		boolean first = FALSE;
-		boolean reached = FALSE;
-	#endif
-
-	int k = 0;
-	//"#pragma omp for" doesn t deal well with odd layer_size...
-	for (k = firstCellIndex; k <= endCellIndex; k++)
+	int k = firstCellIndex;
+	for (k; k <= endCellIndex; k++)
 	{
-		#ifndef NDEBUG
-		assert(!reached);
-		if (!first)
-		{
-			assert(&layer[k - 1] == cellBeforeFirstCell);
-
-			first = TRUE;
-		}
-		#endif
-
 		energy_t oldCurrentCellValue = layer[k];
 
 		if (&layer[k + 1] == cellAfterEndCell)
-		{
-			layer[k] = (nextOldPreviousCellValue + layer[k]
-					+ oldCellBeforeFirstCellValue) / 3;
-			#ifndef NDEBUG
-			reached = TRUE;
-			#endif
-		}
+			layer[k] = (nextOldPreviousCellValue + layer[k] + oldCellAfterEndCellValue) / 3;
 		else
 			layer[k] = (nextOldPreviousCellValue + layer[k] + layer[k + 1]) / 3;
 
@@ -322,13 +310,13 @@ int main(int argc, char *argv[])
 	if (n_threads <= 0)
 	{
 		fprintf(stderr, "Invalid number of threads! %d\n", n_threads);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	if (threshold <= 0.0)
 	{
 		fprintf(stderr, "Invalid threshold! %f\n", threshold);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	/* 1.1. Read arguments */
@@ -374,7 +362,6 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Error: Allocating the layer memory\n");
 		exit(EXIT_FAILURE);
 	}
-	double initial = cp_Wtime();
 
 	#pragma omp parallel num_threads(n_threads) if(n_threads > 1)
 	{
@@ -389,22 +376,26 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	double final = cp_Wtime();
-
+	/**
+	 * The range that all particles affected in 
+	 * the layer array.
+	 */
+	int maxL = 0, minL = 0;
 	/* 4. Storms simulation */
 	for (int i = 0; i < num_storms; i++)
 	{
-		int maxL = 0, minL = layer_size;
-		int maxP = 0, minP = layer_size;
 		int position = 0;
+		/**
+		 * The range that a particle will affect in the layer array 
+		 */
+		int maxP = 0, minP = layer_size;
 		energy_t energy;
-		#pragma omp parallel num_threads(n_threads) if(n_threads > 1)
+		#pragma omp parallel num_threads(n_threads) if(n_threads > 1 && layer_size > MIN_PARALLEL_THRESHOLD)
 		{
 			/* 4.1. Add impacts energies to layer cells */
 			/* For each particle */
 			for (int j = 0; j < storms[i].size; j++)
 			{
-				
 				#pragma omp single
 				{
 					/* Get impact energy (expressed in thousandths) */
@@ -414,10 +405,12 @@ int main(int argc, char *argv[])
 
 					float atenuation = energy / threshold;
 					unsigned long distanceMax = (unsigned long) atenuation * atenuation;
-				
-					distanceMax--;
 
-					//to avoid overflows
+					//to avoid underflow, since distanceMax is an unsigned type
+					if(distanceMax > 0)
+						distanceMax--;
+
+					//to avoid overflows/undeflows
 					maxP = distanceMax >= layer_size ? layer_size : position + distanceMax;
 					minP = distanceMax >= position ? 0 : position - distanceMax;
 				
@@ -428,13 +421,11 @@ int main(int argc, char *argv[])
 					assert(maxL >= maxP && minL <= minP);
 					assert(minL <= layer_size && minL >= 0);
 					assert(maxL <= layer_size && maxL >= 0);
-
 				}
 				
 				/* For each cell in the layer */
 				/* 4.2.2. Update layer using the ancillary values.
 				Skip updating the first and last positions */
-
 				#pragma omp for
 				for (int k = minP; k < maxP; k++)
 				{
@@ -446,7 +437,10 @@ int main(int argc, char *argv[])
 				/* 4.2. Energy relaxation between storms */
 			#ifndef ENERGY_RELAXATION_BEFORE //code below is after
 
-				energy_relaxation(&layer[minL], maxL - minL);
+				int interval = maxL - minL;
+				assert(interval >= 0);
+				assert(minL + interval <= layer_size);
+				energy_relaxation(&layer[minL], interval);
 
 			#else //code below is before
 				/* 4.2.1. Copy values to the ancillary array */
@@ -476,7 +470,6 @@ int main(int argc, char *argv[])
 						maxk = k;
 					}
 				}
-				
 			}
 
 
@@ -499,9 +492,8 @@ int main(int argc, char *argv[])
 					}
 				}*/
 			}
-			fprintf(stderr, "%d\n", maximum[i]);
 
-#pragma omp single
+			#pragma omp single
 			{
 				free(storms[i].posval);
 			}
@@ -538,6 +530,9 @@ int main(int argc, char *argv[])
 	free(layer_copy);
 	#endif
 
+	/**
+	 * The stdout can be a csv file
+	 */
 	fclose(stdout);
 
 	/* 9. Program ended successfully */
