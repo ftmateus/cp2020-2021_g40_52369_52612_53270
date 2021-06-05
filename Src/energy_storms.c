@@ -262,6 +262,12 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
+
+        if(maximum[i] == 0){
+            int pos = layer[0] > layer[layer_size] ? 0 : layer_size;
+            maximum[i] = layer[pos];
+            positions[i] = pos;
+        }
         
     }
 
