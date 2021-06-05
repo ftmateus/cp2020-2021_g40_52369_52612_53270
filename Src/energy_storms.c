@@ -253,17 +253,25 @@ int main(int argc, char *argv[]) {
             layer[k] = ( layer_copy[k-1] + layer_copy[k] + layer_copy[k+1] ) / 3;
 
         /* 4.3. Locate the maximum value in the layer, and its position */
+        int maxk = 0;
         for( k=1; k<layer_size-1; k++ ) {
             /* Check it only if it is a local maximum */
             if ( layer[k] > layer[k-1] && layer[k] > layer[k+1] ) {
-                if ( layer[k] > maximum[i] ) {
-                    maximum[i] = layer[k];
-                    positions[i] = k;
+                if ( layer[k] > layer[maxk] ) {
+                    maxk = k;
                 }
             }
         }
 
-        if(maximum[i] == 0){
+        /**
+         * The energy values on the layer can be always rising 
+         * or always falling
+         */
+        if(maxk != 0)
+			maxk = layer[layer_size - 1] > layer[0] ? layer_size - 1 : 0;
+
+        if (layer[maxk] > maximum[i])
+        {
             int pos = layer[0] > layer[layer_size] ? 0 : layer_size;
             maximum[i] = layer[pos];
             positions[i] = pos;
@@ -298,6 +306,14 @@ int main(int argc, char *argv[]) {
     /* 8. Free resources */    
     for( i=0; i<argc-2; i++ )
         free( storms[i].posval );
+
+    free(layer);
+    free(layer_copy);
+
+    /**
+	 * The stdout can be a csv file
+	 */
+	fclose(stdout);
 
     /* 9. Program ended successfully */
     return 0;

@@ -30,16 +30,13 @@ the input files format in the handout.
 
 --------------------------------------------------------------
 
-
-    \item \verb|BuildPlot.py| - Produces a plot with the metrics about the \verb|Benchmark.py| results. The script imports the \verb|seq.csv| and \verb|omp.csv| files produced by the \verb|Benchmark.py| script and uses the Matplotlib python module to produce the plot.   
-
 In order to test and benchmark our solution, we implemented and used some python scripts for this effect:
 
 -TestScriptBase.py
     Is considered the base of the other scripts and contains all functions and variables necessary for the other scripts to run. The script has no effect by itself, and needs to be imported by the other scripts.
 
 -Benchmark.py
-    like the file name implies, is used to benchmark our solution. After the benchmark, the script will export the results metrics (mean time, speedup, efficiency, cost, etc...) to the seq.csv| and omp.csv files, which contains the metrics about the sequential (energy_storms_seq) and paralleled (energy_storms_omp) programs samples metrics, respectively.
+    like the file name implies, is used to benchmark our solution. After the benchmark, the script will export the results metrics (mean time, speedup, efficiency, cost, etc...) to the seq.csv and omp.csv files, which contains the metrics about the sequential (energy_storms_seq) and paralleled (energy_storms_omp) programs samples metrics, respectively.
     
     To use this script execute:
     `$ python3 Benchmark.py -h (threshold) -l (layer_size) (tests)+`

@@ -70,6 +70,7 @@ double threshold = 0.001f;
  * of the energy relaxation
  */
 #undef ENERGY_RELAXATION_BEFORE
+#undef ENERGY_BOMBARDMENT_BEFORE
 
 /* Structure used to store data for one storm of particles */
 typedef struct
@@ -98,13 +99,18 @@ void update(energy_t *layer, int layer_size, int k, int pos, energy_t energy)
 	/* 4. Compute attenuated energy */
 	energy_t energy_k = energy / layer_size / atenuacion;
 
-	/* 5. Do not add if its absolute value is lower than the threshold */
-
-
+	
+	#ifndef ENERGY_BOMBARDMENT_BEFORE
+	/* 
+	 * Since the range where the absolute value is higher than the threshold
+	 * is determined a priori on the new implementation of the energy bombardment, 
+	 * this assertion should not fail
+	 */
 	assert(energy_k >= threshold / layer_size || energy_k <= -threshold / layer_size);
-
-
-	layer[k] = layer[k] + energy_k;
+	#else 
+	if(energy_k >= threshold / layer_size || energy_k <= -threshold / layer_size)
+	#endif
+		layer[k] = layer[k] + energy_k;
 }
 
 /* ANCILLARY FUNCTIONS: These are not called from the code section which is measured, leave untouched */
@@ -380,7 +386,11 @@ int main(int argc, char *argv[])
 	 * The range that all particles affected in 
 	 * the layer array.
 	 */
+	#ifndef ENERGY_BOMBARDMENT_BEFORE
 	int maxL = 0, minL = layer_size;
+	#else
+	int maxL = layer_size, minL = 0;
+	#endif
 	/* 4. Storms simulation */
 	for (int i = 0; i < num_storms; i++)
 	{
@@ -388,7 +398,12 @@ int main(int argc, char *argv[])
 		/**
 		 * The range that a particle will affect in the layer array 
 		 */
+		#ifndef ENERGY_BOMBARDMENT_BEFORE
 		int maxP = 0, minP = layer_size;
+		#else
+		int maxP = layer_size, minP = 0;
+		#endif
+
 		energy_t energy;
 		#pragma omp parallel num_threads(n_threads) if(n_threads > 1 && layer_size > MIN_PARALLEL_THRESHOLD)
 		{
@@ -403,6 +418,8 @@ int main(int argc, char *argv[])
 					/* Get impact position */
 					position = storms[i].posval[j * 2];
 
+					#ifndef ENERGY_BOMBARDMENT_BEFORE
+
 					float atenuation = energy / threshold;
 					unsigned long distanceMax = (unsigned long) atenuation * atenuation;
 
@@ -412,8 +429,13 @@ int main(int argc, char *argv[])
 
 					//to avoid overflows/undeflows
 					maxP = distanceMax >= layer_size ? layer_size : position + distanceMax;
-					maxP = maxP >= layer_size ? layer_size : maxP;
 					minP = distanceMax >= position ? 0 : position - distanceMax;
+
+					/**
+					 * maxP and minP can be out of bounds
+					 */
+					maxP = maxP >= layer_size ? layer_size : maxP;
+					minP = minP >= layer_size ? layer_size : minP;
 
 					maxL = maxP > maxL ? maxP : maxL;
 					minL = minP < minL ? minP : minL;
@@ -422,6 +444,10 @@ int main(int argc, char *argv[])
 					assert(maxL >= maxP && minL <= minP);
 					assert(minL <= layer_size && minL >= 0);
 					assert(maxL <= layer_size && maxL >= 0);
+					assert(maxP <= layer_size && maxP >= 0);
+					assert(minP <= layer_size && minP >= 0);
+
+					#endif
 				}
 
 				/* For each cell in the layer */
@@ -441,7 +467,8 @@ int main(int argc, char *argv[])
 				int interval = maxL - minL;
 				assert(interval >= 0);
 				assert(minL + interval <= layer_size);
-				energy_relaxation(&layer[minL], interval);
+				if(interval > 0)
+					energy_relaxation(&layer[minL], interval);
 
 			#else //code below is before
 				/* 4.2.1. Copy values to the ancillary array */
@@ -473,24 +500,19 @@ int main(int argc, char *argv[])
 				}
 			}
 
+			/**
+			 * The energy values on the layer can be always rising 
+			 * or always falling
+			 */
+			if(maxk != minL)
+				maxk = layer[maxL] > layer[minL] ? maxL : minL;
 
 			#pragma omp critical
 			{
-				if (maxk != minL)
+				if (layer[maxk] > maximum[i])
 				{
-					if (layer[maxk] > maximum[i])
-					{
-						maximum[i] = layer[maxk];
-						positions[i] = maxk;
-					}
-				}else{
-					maxk = layer[maxL] > layer[minL] ? maxL : minL;
-
-					if (layer[maxk] > maximum[i])
-					{
-						maximum[i] = layer[maxk];
-						positions[i] = maxk;
-					}
+					maximum[i] = layer[maxk];
+					positions[i] = maxk;
 				}
 			}
 
