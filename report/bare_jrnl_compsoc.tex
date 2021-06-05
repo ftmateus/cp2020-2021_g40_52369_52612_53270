@@ -48,7 +48,7 @@
 % *** trigger bugs that do not appear when using other class files.       ***                          ***
 % The testflow support page is at:
 % http://www.michaelshell.org/tex/testflow/
-
+\usepackage{graphicx}
 
 \documentclass[10pt,journal,compsoc]{IEEEtran}
 %
@@ -427,7 +427,7 @@
 
 % The paper headers
 \markboth{
-{Shell \MakeLowercase{\textit{et al.}}: Energy storms parallelization with OpenMP Project Report}
+{Shell \MakeLowercase{\textit{et al.}}: Energy storms parallelization with OpenMP Project Report}}
 % The only time the second header will appear is for the odd numbered pages
 % after the title page when using the twoside option.
 % 
@@ -648,7 +648,11 @@ Computer Society, IEEE, IEEEtran, journal, \LaTeX, paper, template.
 % \fnbelowfloat command of the stfloats package.
 
 
-\section{Results}
+{
+    \centering
+    \section{Results and evaluation}
+}
+
 \input{results}
 
 \section{Conclusion}
