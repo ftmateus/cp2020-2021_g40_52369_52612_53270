@@ -97,10 +97,10 @@ void update(energy_t *layer, int layer_size, int k, int pos, energy_t energy)
 	float atenuacion = sqrtf((float) distance);
 	/* 4. Compute attenuated energy */
 	energy_t energy_k = energy / layer_size / atenuacion;
-	
+
 	/* 5. Do not add if its absolute value is lower than the threshold */
 
-	
+
 	assert(energy_k >= threshold / layer_size || energy_k <= -threshold / layer_size);
 
 
@@ -272,7 +272,7 @@ void energy_relaxation(energy_t *layer, int layer_size)
 
 	energy_t oldCellAfterEndCellValue = *cellAfterEndCell;
 	energy_t nextOldPreviousCellValue = *cellBeforeFirstCell;
-	
+
 	/**
 	 *	The threads should wait for each other in order to get 
 	 *  the old values of the layer array before those values are
@@ -281,7 +281,7 @@ void energy_relaxation(energy_t *layer, int layer_size)
 	#pragma omp barrier
 
 	int k = firstCellIndex;
-	for (k; k <= endCellIndex; k++)
+	for (; k <= endCellIndex; k++)
 	{
 		energy_t oldCurrentCellValue = layer[k];
 
@@ -380,7 +380,7 @@ int main(int argc, char *argv[])
 	 * The range that all particles affected in 
 	 * the layer array.
 	 */
-	int maxL = 0, minL = 0;
+	int maxL = 0, minL = layer_size;
 	/* 4. Storms simulation */
 	for (int i = 0; i < num_storms; i++)
 	{
@@ -412,8 +412,9 @@ int main(int argc, char *argv[])
 
 					//to avoid overflows/undeflows
 					maxP = distanceMax >= layer_size ? layer_size : position + distanceMax;
+					maxP = maxP >= layer_size ? layer_size : maxP;
 					minP = distanceMax >= position ? 0 : position - distanceMax;
-				
+
 					maxL = maxP > maxL ? maxP : maxL;
 					minL = minP < minL ? minP : minL;
 
@@ -422,7 +423,7 @@ int main(int argc, char *argv[])
 					assert(minL <= layer_size && minL >= 0);
 					assert(maxL <= layer_size && maxL >= 0);
 				}
-				
+
 				/* For each cell in the layer */
 				/* 4.2.2. Update layer using the ancillary values.
 				Skip updating the first and last positions */
@@ -484,7 +485,7 @@ int main(int argc, char *argv[])
 					}
 				}else{
 					maxk = layer[maxL] > layer[minL] ? maxL : minL;
-					
+
 					if (layer[maxk] > maximum[i])
 					{
 						maximum[i] = layer[maxk];
@@ -509,7 +510,7 @@ int main(int argc, char *argv[])
 	if(!csv)
 		debug_print( layer_size, layer, positions, maximum, num_storms, storms);
 	#endif
-	
+
 	/* 7. Results output, used by the Tablon online judge software */
 	printf("\n");
 
