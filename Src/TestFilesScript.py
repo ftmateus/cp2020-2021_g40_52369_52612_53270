@@ -10,7 +10,7 @@ all_test_files = get_test_files()
 # layer_size = 111117
 layer_size = 10000
 
-N_RUNS = 50
+N_RUNS = 5
 
 
 MAX_THREADS = os.cpu_count()
@@ -36,6 +36,6 @@ print("Using all test_08_* files")
 run_tests(layer_size, get_test_files("test_08_*"), n_runs = N_RUNS)
 
 
-print("\033[0;32mTest complete!",)
+print(GREEN + "Test complete!",)
 
 os.remove(CSV_FILENAME)
