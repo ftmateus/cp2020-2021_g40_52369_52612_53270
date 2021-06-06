@@ -9,7 +9,7 @@ layer_size = 1000000
 threshold = 0.001
 threads = [1, 2, 4, 8, 16, 32, 64]
 
-tests = get_test_files("test_01_*")
+tests = get_test_files("test_01_*") + get_test_files("test_07_a1M_p5k_w2")
 
 for opt in opargs:
     if(opt[0] == "-l"):

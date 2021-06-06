@@ -19,7 +19,9 @@ def plot_results_nthreads_time(plot_name, SEQStats, OMPStats):
     threshold = SEQStats.threshold
 
 
-    figure, (timesPlt, otherstatsPlt) = plt.subplots(2, figsize=(10,8))
+    figure, (timesPlt, otherstatsPlt, efficiencyPlt) = plt.subplots(3, figsize=(12,10))
+
+    figure.tight_layout(pad=3.0)
 
     timesPlt.xaxis.set_major_locator(MaxNLocator(integer=True))
 
@@ -35,15 +37,16 @@ def plot_results_nthreads_time(plot_name, SEQStats, OMPStats):
 
     timesPlt.bar(OMPxAxe, OMPStats.meanTime, color="blue")
 
-    otherstatsPlt.set_xlabel("Number of Threads")
-
     otherstatsPlt.plot(OMPxAxe, OMPStats.speedUp, color='r', label = "SpeedUp")
 
-    otherstatsPlt.plot(OMPxAxe, OMPStats.efficiency, color='g', label = "Efficiency")
+    efficiencyPlt.plot(OMPxAxe, OMPStats.efficiency, color='g', label = "Efficiency")
 
     otherstatsPlt.plot(OMPxAxe, OMPStats.cost, color='b', label = "Cost")
     
-    otherstatsPlt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15),
+    otherstatsPlt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.25),
+          ncol=3, fancybox=True, shadow=True)
+
+    efficiencyPlt.legend(loc='lower center', bbox_to_anchor=(0.5, -0.25),
           ncol=3, fancybox=True, shadow=True)
 
     plt.savefig(PLOTS_FOLDER + plot_name)

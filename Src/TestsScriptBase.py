@@ -106,8 +106,8 @@ class SamplesStats:
 
     def _computeEfficiency(self):
         assert len(self.efficiency) == len(self.meanTime)
-        for p in range (1, len(self.meanTime)):
-            self.efficiency[p] = self.speedUp[p]/(self.threads[p] + 1)
+        for p in range (0, len(self.meanTime)):
+            self.efficiency[p] = self.speedUp[p]/(self.threads[p])
 
     def _computeCost(self):
         assert len(self.cost) == len(self.meanTime)

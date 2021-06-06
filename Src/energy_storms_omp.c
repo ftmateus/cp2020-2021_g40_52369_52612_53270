@@ -398,11 +398,7 @@ int main(int argc, char *argv[])
 		/**
 		 * The range that a particle will affect in the layer array 
 		 */
-		#ifndef ENERGY_BOMBARDMENT_BEFORE
-		int maxP = 0, minP = layer_size;
-		#else
 		int maxP = layer_size, minP = 0;
-		#endif
 
 		energy_t energy;
 		#pragma omp parallel num_threads(n_threads) if(n_threads > 1 && layer_size > MIN_PARALLEL_THRESHOLD)
@@ -420,8 +416,12 @@ int main(int argc, char *argv[])
 
 					#ifndef ENERGY_BOMBARDMENT_BEFORE
 
-					float atenuation = energy / threshold;
-					unsigned long distanceMax = (unsigned long) atenuation * atenuation;
+					long double atenuation = energy / threshold;
+					unsigned long long distanceMax = (unsigned long long) atenuation*atenuation;
+
+					//check overflow
+					if(atenuation > 1.0 && distanceMax == 0)
+						distanceMax = layer_size;
 
 					//to avoid underflow, since distanceMax is an unsigned type
 					if(distanceMax > 0)
@@ -439,6 +439,8 @@ int main(int argc, char *argv[])
 
 					maxL = maxP > maxL ? maxP : maxL;
 					minL = minP < minL ? minP : minL;
+
+					//fprintf(stderr, "%d, %d, %d, %d, %llu\n", maxL, minL, maxP, minP, distanceMax);
 
 					assert(maxL >= minL);
 					assert(maxL >= maxP && minL <= minP);
