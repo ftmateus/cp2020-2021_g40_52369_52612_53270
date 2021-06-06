@@ -1,7 +1,15 @@
+
 In this last stage that process each wave, the
 point with the maximum energy is located and its value and position are stored.
 After all the waves have been processed, the maximums and positions for all waves
 are printed.
 \subsubsection{Sequential version analysis}
+Upon analysing the sequential code, we can easily identify two output dependencies, as both the array maximum and the array positions are written to the same indexes inside a for loop. 
 
+We also encountered an error in the source code, as the original loop works by checking for local maximums, comparing the current layer position value, with the previous and next one; by this logic, the first and last positions of the array are never evaluated, so in a scenario where energy values throughout the layer positions would continuously increase, a maximum would never be correctly identified.
 \subsubsection{Parallel version implementation}
+In order to solve the output dependencies, we begin by declaring a variable which will hold the maximum value found in the loop. As it is found within a parallel code block, each thread will have its own private "maxk" variable, which will hold the maximum value for the corresponding thread work.
+
+As per the original code, we utilize the "local maximum" condition to save potential maximums. As the threads finish their work, each will have a different value in their "maxk" variable, which will then be processed by the conditions written within the critical block of code; for each storm, a single maximum and position index will be occupied by the biggest value between all threads. This pattern is known as divide and conquer.
+
+As an attempt to correct the original code, we include a condition to ensure that, if no change was made to the maximum value during the loop iteration, then that can only mean that this layers maximum lies within the first or last position.
