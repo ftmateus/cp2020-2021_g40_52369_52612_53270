@@ -14,4 +14,6 @@ However, doing so implies resolving some complex loop-carried dependencies, besi
 
 First, instead of a whole ancillary array, there would only be needed 2 values: the original value of the previous cell and the original value of the current cell. After updating the current cell, its previous cell's original value becomes the current cell's original value, and the cycle proceeds to updating the next cell.
 
-Second, in order to make this process parallelizable, the layer would be split equally by the threads. However, since each cell needs its neighbors, the extremes of each sub-layer would need to be given ancillary cells with the original values of their missing neighbors. This process is done before the updating process.
+Second, in order to make this process parallelizable, the layer would be split equally by the threads. However, since each cell needs its neighbors, the extremes of each sub-layer would need to be given ancillary cells with the original values of their missing neighbors. This process is done before the updating process. This is a implementation of a Map related pattern known as \textbf{stencil}, where each instance of the map function accesses neighbors of its input, offset from its usual input.
+
+\par 

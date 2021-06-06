@@ -41,7 +41,7 @@ threshold/layer size \leq energy / layer\_size / attenuation\\
 
 So instead of trying to update the whole layer, and only updating the relevant cells, it now only updates the relevant cells from k\textsubscript{min} to k\textsubscript{max} , which can save considerable time when the the amount of cells in the layer and/or the threshold are high.
 
-The second step is to simply divide the resulting layer for each thread using OMP and update it. Since the update function has no dependencies among cells there will never be any concurrency issue among them.
+The second step is to simply divide the resulting layer for each thread using OMP and update it. Since the update function has no dependencies among cells there will never be any concurrency issue among them. This parallel pattern is known as \textbf{Map}, where a simple operation is applied to all elements and it is used to solve embarrassingly parallel problems
 
 \begin{figure}[h]
     \centering
